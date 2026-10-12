@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>UR ROV</title>
+    <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+    <header>
+        <h1>UR ROV</h1>
+        <div id="status">
+            <span id="transport-status">bridge: disconnected</span>
+            <span id="esp-status">esp32: silent</span>
+            <span id="camera-status">camera: off</span>
+            <span id="vision-status">april-tag: connecting</span>
+        </div>
+        <div id="actions">
+            <button id="btn-connect">Connect</button>
+            <button id="btn-disconnect" disabled>Disconnect</button>
+            <select id="camera-select" title="camera / test image"></select>
+            <button id="btn-camera">Start Camera</button>
+            <select id="view-layout" title="which displays to show">
+                <option value="both">Pilot + detector</option>
+                <option value="pilot">Pilot only</option>
+                <option value="detector">Detector only</option>
+            </select>
+            <button id="btn-arm" disabled>ARM</button>
+            <button id="btn-estop" class="danger">E-STOP (Esc)</button>
+        </div>
+    </header>
+
+    <main>
+        <section id="camera-area" data-layout="both">
+            <video id="camera" autoplay muted playsinline style="display:none"></video>
+            <div class="view" id="pilot-view">
+                <div class="view-label">PILOT VIEW <span>view filters, for our eyes only</span></div>
+                <canvas id="displayCanvas"></canvas>
+            </div>
+            <div class="view" id="detector-view">
+                <div class="view-label">DETECTOR INPUT <span id="detector-label">exactly what the AprilTag detector gets</span></div>
+                <canvas id="detectorCanvas"></canvas>
+            </div>
+            <div id="arm-message"></div>
+        </section>
+
+        <aside id="side">
+            <section id="help">
+                <h2>Pilot</h2>
+                <p><b>ARM</b> first. W/S forward-back, A/D turn, R/F up-down</p>
+                <p>J/K throttle, hold Space = stop, Esc = E-STOP</p>
+                <canvas id="vector-display"></canvas>
+                <label class="slider">MAX throttle <span id="max-value"></span>
+                    <input id="max-throttle" type="range" min="0.05" step="0.01" />
+                </label>
+                <div id="thruster-test">
+                    <div class="hint">THRUSTER TEST: hold a button, only that motor runs (ARM first, motor clamped)</div>
+                    <div class="test-grid">
+                        <button data-test="left" data-sign="1">L +</button>
+                        <button data-test="right" data-sign="1">R +</button>
+                        <button data-test="vert" data-sign="1">V + (up)</button>
+                        <button data-test="left" data-sign="-1">L -</button>
+                        <button data-test="right" data-sign="-1">R -</button>
+                        <button data-test="vert" data-sign="-1">V - (down)</button>
+                    </div>
+                    <div class="hint">PIN TEST: raw signal on one ESP32 pin (ignores config) - which motor is on it?</div>
+                    <div class="test-grid">
+                        <button data-pin="0" data-sign="1">GPIO 4 +</button>
+                        <button data-pin="1" data-sign="1">GPIO 5 +</button>
+                        <button data-pin="2" data-sign="1">GPIO 6 +</button>
+                        <button data-pin="0" data-sign="-1">GPIO 4 -</button>
+                        <button data-pin="1" data-sign="-1">GPIO 5 -</button>
+                        <button data-pin="2" data-sign="-1">GPIO 6 -</button>
+                    </div>
+                </div>
+                <div id="esp-warning"></div>
+            </section>
+
+            <section id="tags-panel">
+                <h2>Mission 2.1 AprilTag</h2>
+                <div class="row">
+                    <button id="rule-largest">LARGEST</button>
+                    <button id="rule-smallest">SMALLEST</button>
+                </div>
+                <div class="row">
+                    <button id="tags-undo" title="drop the last confirmed tag (a false one)">Undo last</button>
+                    <button id="tags-reset">Reset</button>
+                    <label class="inline"><input id="tags-clahe" type="checkbox" checked /> CLAHE</label>
+                    <label class="inline">tags <input id="tags-expected" type="number" min="1" max="9" value="3" /></label>
+                </div>
+                <div id="vision-list">0/3: none yet</div>
+                <div id="vision-seen">in view: -</div>
+                <div id="vision-selected">set the rule</div>
+            </section>
+
+            <section id="network-panel">
+                <h2>Mission 1 Wi-Fi</h2>
+                <div class="network-input-container">
+                    <input class="network-input-field" id="wifi-input" type="text" placeholder="SSID (e.g. UR_Field)"
+                           autocomplete="off" spellcheck="false" />
+                    <input class="network-input-field" id="pass-input" type="text" placeholder="password"
+                           autocomplete="off" spellcheck="false" />
+                    <div class="row"><button id="network-send">Join Wi-Fi</button></div>
+                    <input class="network-input-field" id="url-input" type="text" placeholder="URL (http://...)"
+                           autocomplete="off" spellcheck="false" />
+                    <div class="row"><button id="network-get">HTTP GET</button></div>
+                </div>
+                <div class="network-input-meta"><span id="network-status"></span></div>
+                <div id="mission1-result"></div>
+                <div id="network-output" data-state="empty">no messages</div>
+            </section>
+
+            <section id="detector-filters">
+                <h2>Detector filters (change detection)</h2>
+                <p class="hint">Applied to the frame before AprilTag detection. Check the result on the
+                    DETECTOR INPUT display and the margin numbers. CLAHE (Mission 2.1 panel) runs after these.</p>
+            </section>
+
+            <section id="filters">
+                <h2>Pilot view filters (display only)</h2>
+            </section>
+        </aside>
+    </main>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
