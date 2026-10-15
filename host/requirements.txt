@@ -1,0 +1,9 @@
+# Laptop side. Install:  python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# Verified 2026-10: pyserial 3.5, websockets 17.2, numpy 2.5.4,
+# opencv-python 5.0.0, pupil-apriltags 1.0.4, pytest 9.1 on Python 3.12 (macOS arm64).
+pyserial>=3.5,<4
+websockets>=13,<18
+numpy>=1.26,<3
+opencv-python>=4.8,<6
+pupil-apriltags>=1.0.4,<2
+pytest>=8

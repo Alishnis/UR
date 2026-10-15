@@ -1,0 +1,6 @@
+{
+  "name": "rov-webgui",
+  "private": true,
+  "type": "module",
+  "description": "Marker so `node --test` can import the browser ES modules. No dependencies, no build step."
+}

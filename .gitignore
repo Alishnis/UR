@@ -1,0 +1,9 @@
+.pio/
+.vscode/.browse*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch
+host/.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store

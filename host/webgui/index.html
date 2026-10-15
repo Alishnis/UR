@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ROV control</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header id="statusbar" aria-label="Status">
+    <span class="chip" id="chip-bridge" title="Browser to bridge connection">Bridge: &hellip;</span>
+    <span class="chip" id="chip-serial" title="Bridge to ESP32 serial port">Serial: &hellip;</span>
+    <span class="chip" id="chip-esp" title="ESP32 alive = any line within 1.5 s">ESP: &hellip;</span>
+    <span class="chip" id="chip-fw" title="Firmware mode, from the boot banner or the R report">Firmware: ?</span>
+    <span class="chip" id="chip-ping" title="Round trip browser to ESP32 and back">Ping: &ndash;</span>
+    <span class="chip dim" id="chip-vision" title="AprilTag detection (phase 4)">Vision: &ndash;</span>
+    <span class="chip dim" id="chip-fps" title="Camera frames per second (phase 4)">FPS: &ndash;</span>
+    <span class="chip" id="chip-keys" title="Keyboard driving is paused while a text field has focus">Keys: active</span>
+  </header>
+
+  <div id="notice" role="status" aria-live="polite" hidden></div>
+
+  <main>
+    <section class="panel" id="panel-drive">
+      <h2>Drive</h2>
+      <div class="armrow">
+        <button type="button" id="btn-arm" class="btn arm">ARM</button>
+        <button type="button" id="btn-estop" class="btn estop">E-STOP <small>Esc</small></button>
+      </div>
+      <div id="armstate" class="armstate">DISARMED</div>
+
+      <label class="slider">
+        <span>MAX throttle</span>
+        <input type="range" id="max-slider" aria-label="MAX throttle">
+        <output id="max-out"></output>
+      </label>
+      <p class="hint" id="max-hint"></p>
+
+      <div class="slider">
+        <span>Magnitude <small>J / K</small></span>
+        <div class="meter"><div id="mag-fill"></div></div>
+        <output id="mag-out"></output>
+      </div>
+
+      <details class="keyhelp">
+        <summary>Keys</summary>
+        <table>
+          <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>forward / back</td></tr>
+          <tr><td><kbd>A</kbd> <kbd>D</kbd></td><td>yaw left / right</td></tr>
+          <tr><td><kbd>R</kbd> <kbd>F</kbd></td><td>up / down</td></tr>
+          <tr><td><kbd>J</kbd> <kbd>K</kbd></td><td>lower / raise magnitude</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>hold: all zero</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>E-STOP (disarm), works while typing</td></tr>
+        </table>
+      </details>
+    </section>
+
+    <section class="panel" id="panel-thrusters">
+      <h2>Thrusters</h2>
+      <div id="bars" class="bars"></div>
+      <p class="hint">Bar = command being sent. Marker = real pulse from telemetry.</p>
+    </section>
+
+    <section class="panel" id="panel-tests">
+      <h2>Tests <small>press and hold, only while ARMED</small></h2>
+      <h3>Thruster test <small>through output mapping and invert</small></h3>
+      <div id="test-thruster" class="testrow"></div>
+      <h3>Pin test <small>raw, ignores mapping, invert, gain, dead band</small></h3>
+      <div id="test-pin" class="testrow"></div>
+      <p class="hint">Power of both tests = the MAX throttle slider. Motor clamped, hand on the e-stop.</p>
+    </section>
+
+    <section class="panel" id="panel-selfcheck">
+      <h2>Pin self-check</h2>
+      <button type="button" id="btn-selfcheck" class="btn small">Run R</button>
+      <div id="selfcheck" class="selfcheck"></div>
+      <p class="hint">Needs a jumper from each ESC pin to its readback pin. DRY RUN firmware has no signal.</p>
+    </section>
+
+    <section class="panel" id="panel-calib">
+      <details>
+        <summary><h2>Calibration</h2></summary>
+        <p class="hint">Saved in this browser. Defaults live in <code>js/config.js</code>. Editable only while disarmed.</p>
+        <div id="calib" class="calib"></div>
+        <p id="calib-warn" class="warn" hidden></p>
+        <button type="button" id="btn-calib-reset" class="btn small">Reset to config.js</button>
+      </details>
+    </section>
+
+    <section class="panel wide" id="panel-mission1">
+      <h2>Mission 1: Wi-Fi pairing <small>the ESP32 itself fetches the text, at the surface</small></h2>
+      <div class="m1grid">
+        <div class="m1form">
+          <label>SSID <input type="text" id="m1-ssid" autocomplete="off" spellcheck="false" maxlength="32"></label>
+          <label>Password <input type="text" id="m1-password" autocomplete="off" spellcheck="false" maxlength="63"></label>
+          <label>URL <input type="text" id="m1-url" autocomplete="off" spellcheck="false" placeholder="http://192.168.x.x/" maxlength="158"></label>
+          <div class="m1buttons">
+            <button type="button" id="m1-connect" class="btn">Connect</button>
+            <button type="button" id="m1-get" class="btn">GET</button>
+          </div>
+          <div id="m1-wifi" class="m1wifi">Wi-Fi: not connected</div>
+          <p class="hint" id="m1-hint"></p>
+        </div>
+        <div class="m1result">
+          <div class="m1label">Received by the ESP32</div>
+          <div id="m1-text" class="m1text" aria-live="polite">&mdash;</div>
+          <div id="m1-notes" class="hint"></div>
+          <div id="m1-log" class="log m1log" aria-live="off"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel wide" id="panel-log">
+      <h2>Log <button type="button" id="btn-log-clear" class="btn small">Clear</button></h2>
+      <div id="log" class="log" aria-live="off"></div>
+    </section>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
