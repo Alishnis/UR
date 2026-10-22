@@ -26,8 +26,9 @@ from bridge.mock_mission1 import HttpGet, MockMission1
 
 FW_VERSION = "0.1.0-mock"
 NUM_ESC = 3
-ESC_PINS = (1, 42, 40)
-READBACK_PINS = (4, 5, 6)
+ESC_PINS = (1, 40, 42)
+READBACK_PINS = (4, 6, 5)
+NEUTRAL_TRIM_US = (0, -22, 0)  # src/config.h: added to the real pulse only, T stays untrimmed
 ESC_NAMES = ("left", "right", "vert")
 
 ARM_MS = 4000
@@ -101,10 +102,10 @@ def parse_line(line: str) -> Command:
                 return INVALID
             vals.append(v)
         return Command("drive", values=tuple(vals))
-    if letter in "SPG":
+    if letter in "SPGL":
         if rest:
             return INVALID
-        return Command({"S": "stop", "P": "ping", "G": "get"}[letter])
+        return Command({"S": "stop", "P": "ping", "G": "get", "L": "scan"}[letter])
     if letter == "R":
         modes = {"": -1, "1": 1, "0": 0}
         if rest not in modes:
@@ -213,6 +214,7 @@ class MockEsp32:
         e = self.esc
         self._out("")
         self._out(f"ROV firmware {FW_VERSION}")
+        self._out("ROV reset reason: power-on")
         self._out("ROV mode: " + ("DRY RUN (ESC pins held LOW, no pulses)" if self.dry_run else "LIVE"))
         pins = " ".join(f"{n}=io{p}" for n, p in zip(ESC_NAMES, ESC_PINS))
         rb = " ".join(f"io{p}" for p in READBACK_PINS)
@@ -222,6 +224,8 @@ class MockEsp32:
             f"ROV ESC: {kind}, neutral {e.neutral_us} us, clamp {e.min_us}..{e.max_us} us, "
             "50 Hz, 14-bit LEDC"
         )
+        trims = ", ".join(f"{n} {t:+d}" for n, t in zip(ESC_NAMES, NEUTRAL_TRIM_US))
+        self._out(f"ROV ESC neutral trim: {trims} us")
         self._out(f"ROV watchdog {WATCHDOG_MS} ms, arming: neutral for {self.arm_ms} ms, input ignored")
 
     def _all_neutral(self) -> None:
@@ -246,10 +250,11 @@ class MockEsp32:
         parts = []
         for i in range(NUM_ESC):
             head = f"{ESC_NAMES[i]} io{ESC_PINS[i]}->io{READBACK_PINS[i]}: "
+            out = self.us[i] + NEUTRAL_TRIM_US[i]  # what is really on the pin, like outUs() in main.cpp
             if self.dry_run or not self.readback_wired:
-                parts.append(head + f"no signal (LOW) sent {self.us[i]}")
+                parts.append(head + f"no signal (LOW) sent {out}")
             else:
-                parts.append(head + f"{self.us[i]}us 50Hz sent {self.us[i]} ok")
+                parts.append(head + f"{out}us 50Hz sent {out} ok")
         return "R " + ("[DRY RUN] " if self.dry_run else "") + " | ".join(parts)
 
     # -- protocol --------------------------------------------------------
@@ -282,6 +287,8 @@ class MockEsp32:
             self.m1.set_url(cmd.url)
         elif t == "get":
             self.m1.get(now)
+        elif t == "scan":
+            self.m1.scan(now)
 
     def _after_get(self) -> None:
         """Like afterBlockingGet() in main.cpp: input queued during the GET is stale."""

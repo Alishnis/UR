@@ -42,7 +42,7 @@ export const CONFIG = {
 
   // GPIO numbers of the firmware outputs, used for labels only. Must match
   // ESC_PINS in src/config.h.
-  slotPins: [1, 42, 40],
+  slotPins: [1, 40, 42],
 
   // Per logical thruster:
   //   invert   flip the sign (fixes a motor that spins the wrong way)   (measure, Q4)
@@ -54,4 +54,48 @@ export const CONFIG = {
     right: { invert: false, gain: 1.0, deadBand: 0.0 },
     vert: { invert: false, gain: 1.0, deadBand: 0.0 },
   },
+
+  // ---- Camera and vision (missions 2-5). Display-only: nothing here reaches the motors. ----
+
+  // Vision WebSocket port in the bridge (--vision-port). ?visionPort=... in the address bar overrides it.
+  visionPort: 8766,
+
+  // Camera request and lens. hfovDeg = horizontal field of view IN AIR                 (measure)
+  // underwater: a flat port shrinks the FOV ~1.33x, the GUI then uses 2*atan(tan(hfov/2)/1.333).
+  // HFOV and underwater can also be changed in the Drive tab (remembered in this browser).
+  camera: { width: 1280, height: 720, hfovDeg: 70, underwater: true },
+
+  // Frames sent to the detector: rate, JPEG quality 0..1, how long to wait for an answer (ms),
+  // JPEG width per mode (tags need detail; line and colours are fine with less).
+  // More frames = more chances to catch a tag between motion blur; tags take ~20 ms each.
+  vision: { sendHz: 15, jpegQuality: 0.9, timeoutMs: 2000, sendWidth: { tags: 1280, line: 640, colors: 640 } },
+
+  // 2.1 tags: tags on the course, sightings before an id counts, detector minimum decision
+  // margin (higher = fewer false ids, lower = finds faint tags; a real webcam gives small tags
+  // 10-40), corrected bits allowed (0-2; tag36h11 ids differ in >= 11 bits, so 1 is safe),
+  // CLAHE second pass when fewer than `expected` tags were found (faint / murky).
+  mission21: { expected: 3, confirmFrames: 5, minMargin: 10, maxHamming: 1, clahe: true },
+
+  // 2.2 docking advice: turn until the tag is within alignDeg, then up/down until within
+  // alignVertM (metres), "SLOW, ENTERING" once closer than slowDistM (metres).
+  // aimBelowM: how far the chamber entrance centre is BELOW its tag (metres, measure on the
+  // frame); 0 = aim at the tag itself. The simulator uses its own layout.          (measure)
+  mission22: { alignDeg: 5, alignVertM: 0.08, slowDistM: 1.0, aimBelowM: 0 },
+
+  // 3 line: checkpoints after the start tape and their spacing (cm), line darkness threshold,
+  // reference row for the offset and the row a tape must cross to count (fractions of the image
+  // height from the top), steering dead zone (|steer| below it = ON LINE).
+  // triggerRow: the detector loses a tape at ~0.9 (too little line left below it to call it a
+  // gap), so the row must stay well above that or a fast tape jumps over the counting band.
+  mission3: { checkpoints: 3, spacingCm: 50, darkThresh: 25, refRow: 0.75, triggerRow: 0.75, steerDead: 0.08 },
+
+  // 4 hook: continuous hold that secures the 20 points (ms).
+  mission4: { holdMs: 3000 },
+
+  // 5 poles: smallest blob (fraction of the frame area), pole shape (box height / width),
+  // "aligned" band around the image centre and "close" box height (fractions of the frame).
+  mission5: { minAreaFrac: 0.0008, minAspect: 1.2, alignFrac: 0.08, closeFrac: 0.6 },
+
+  // Attempt clock in the camera panel (contest: 20 min for the tasks).
+  attemptMinutes: 20,
 };

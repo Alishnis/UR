@@ -20,12 +20,15 @@ async def amain(args: argparse.Namespace) -> None:
         ws_port=args.ws_port,
         mock_arm_ms=args.mock_arm_ms,
         mock_dry_run=args.mock_dry_run,
+        vision=not args.no_vision,
+        vision_port=args.vision_port,
     )
     await bridge.start()
     mode = "MOCK ESP32 (no hardware)" if args.mock else "serial " + (args.port or "(auto-detect)")
     print(f"ROV bridge, {mode}")
     print(f"  GUI:        http://localhost:{bridge.http_port}/")
     print(f"  WebSocket:  ws://localhost:{bridge.ws_port}/")
+    print(f"  Vision:     {bridge.vision_status()}")
     print("Ctrl+C to stop (motors are set to neutral first).")
 
     stop = asyncio.Event()
@@ -46,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--host", default="127.0.0.1", help="bind address (default: this laptop only)")
     ap.add_argument("--http-port", type=int, default=8000)
     ap.add_argument("--ws-port", type=int, default=8765)
+    ap.add_argument("--vision-port", type=int, default=8766, help="camera vision WebSocket (default 8766)")
+    ap.add_argument("--no-vision", action="store_true", help="do not start the camera vision service")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(

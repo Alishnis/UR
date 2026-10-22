@@ -4,6 +4,9 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_wifi.h>
+
+#include <memory>
 
 #include "config.h"
 #include "mission1_text.h"
@@ -20,6 +23,66 @@ char g_url[MAX_LINE + 1];
 WifiState g_state = WifiState::Idle;
 uint32_t g_startMs = 0;
 bool g_reportedNoSsid = false;
+bool g_scanning = false;
+uint32_t g_scanStartMs = 0;
+// Disconnects while joining that mean "the key is wrong" (set from the Wi-Fi task, read in poll()).
+// A wrong WPA2 password shows up as a handshake timeout, rarely as AUTH_FAIL; one alone can also be
+// a bad radio moment, so two in a row are needed.
+volatile uint8_t g_authFails = 0;
+constexpr uint8_t AUTH_FAILS_WRONG_PASSWORD = 2;
+
+void onDisconnect(arduino_event_id_t, arduino_event_info_t info) {
+  const uint8_t r = info.wifi_sta_disconnected.reason;
+  if (r == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT || r == WIFI_REASON_AUTH_FAIL || r == WIFI_REASON_HANDSHAKE_TIMEOUT ||
+      r == WIFI_REASON_802_1X_AUTH_FAILED) {
+    if (g_authFails < 255) g_authFails = g_authFails + 1;
+  }
+}
+
+void radioOn() {
+  WiFi.persistent(false);  // do not wear out flash with credentials
+  WiFi.mode(WIFI_STA);
+  WiFi.setTxPower((wifi_power_t)WIFI_TX_POWER_QDBM);
+}
+
+void stopScan() {
+  esp_wifi_scan_stop();
+  WiFi.scanDelete();
+  g_scanning = false;
+}
+
+// Called from poll() while a scan runs: prints the result once it is there.
+void pollScan(uint32_t nowMs) {
+  const int16_t n = WiFi.scanComplete();
+  if (n == WIFI_SCAN_RUNNING) {
+    if (elapsedMoreThan(nowMs, g_scanStartMs, WIFI_SCAN_TIMEOUT_MS)) {
+      stopScan();
+      Serial.print("N scan: failed (timeout)\n");
+    }
+    return;
+  }
+  g_scanning = false;
+  if (n < 0) {
+    WiFi.scanDelete();
+    Serial.print("N scan: failed\n");
+    return;
+  }
+  static int rssi[64];
+  const size_t count = n < 64 ? (size_t)n : 64;
+  for (size_t i = 0; i < count; i++) rssi[i] = WiFi.RSSI(i);
+  size_t order[MAX_SCAN_SHOWN];
+  const size_t shown = m1text::strongestFirst(rssi, count, order, MAX_SCAN_SHOWN);
+  Serial.printf("N scan: %d networks\n", (int)n);
+  char line[80];
+  for (size_t k = 0; k < shown; k++) {
+    const size_t i = order[k];
+    m1text::formatNet(line, sizeof(line), rssi[i], (int)WiFi.channel(i),
+                      WiFi.encryptionType(i) == WIFI_AUTH_OPEN, WiFi.SSID(i).c_str());
+    Serial.printf("N net: %s\n", line);
+  }
+  if ((size_t)n > shown) Serial.printf("N scan: (%u more not shown)\n", (unsigned)((size_t)n - shown));
+  WiFi.scanDelete();
+}
 
 const char* statusName(wl_status_t s) {
   switch (s) {
@@ -50,7 +113,9 @@ bool readBody(HTTPClient& http, bool chunked, m1text::Body<MAX_BODY_BYTES>& body
   while ((int32_t)(deadline - millis()) > 0) {
     int avail = stream->available();
     if (avail > 0) {
-      size_t n = stream->read(buf, avail < (int)sizeof(buf) ? (size_t)avail : sizeof(buf));
+      const int got = stream->read(buf, avail < (int)sizeof(buf) ? (size_t)avail : sizeof(buf));
+      if (got <= 0) continue;  // TLS can still say "nothing / error" after available() > 0
+      const size_t n = (size_t)got;
       if (chunked) {
         dec.feed(buf, n, [&](uint8_t b) { body.add(b); });
         if (dec.error()) {
@@ -84,16 +149,30 @@ void connect(const char* ssid, const char* password) {
   strlcpy(g_ssid, ssid, sizeof(g_ssid));
   strlcpy(g_password, password, sizeof(g_password));
 
-  WiFi.persistent(false);  // do not wear out flash with credentials
-  WiFi.mode(WIFI_STA);
+  if (g_scanning) {  // joining needs the radio: a scan in progress would make it fail
+    stopScan();
+    Serial.print("N scan: cancelled (joining Wi-Fi)\n");
+  }
+  static bool hooked = false;
+  if (!hooked) {
+    WiFi.onEvent(onDisconnect, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+    hooked = true;
+  }
+  radioOn();
   WiFi.setAutoReconnect(true);
-  WiFi.setTxPower((wifi_power_t)WIFI_TX_POWER_QDBM);
-  WiFi.begin(g_ssid, g_password[0] ? g_password : nullptr);  // no password = open network
-
-  g_state = WifiState::Connecting;
-  g_startMs = millis();
+  g_authFails = 0;
+  // no password = open network; begin() blocks up to ~1 s while the radio starts
+  const wl_status_t started = WiFi.begin(g_ssid, g_password[0] ? g_password : nullptr);
   g_reportedNoSsid = false;
-  Serial.printf("N wifi: connecting to %s\n", g_ssid);
+  g_startMs = millis();
+  if (started == WL_CONNECT_FAILED) {
+    g_state = WifiState::Failed;
+    Serial.print("N wifi: failed to start joining (a WPA2 password needs 8-63 characters)\n");
+  } else {
+    g_state = WifiState::Connecting;
+    Serial.printf("N wifi: connecting to %s\n", g_ssid);
+  }
+  afterBlockingGet();  // the radio start blocked: queued input is stale, the watchdog must not trip
 }
 
 void setUrl(const char* url) {
@@ -101,7 +180,33 @@ void setUrl(const char* url) {
   Serial.printf("N url set: %s\n", g_url);
 }
 
+void scan() {
+  if (g_scanning) {
+    Serial.print("N scan: already running\n");
+    return;
+  }
+  if (g_state == WifiState::Connecting) {
+    Serial.print("N scan: busy joining Wi-Fi, scan again when it is connected or failed\n");
+    return;
+  }
+  if (WiFi.getMode() == WIFI_OFF) {  // first use: starting the radio blocks for a moment
+    stopAllThrusters();
+    radioOn();
+    afterBlockingGet();
+  }
+  WiFi.scanDelete();
+  // async: loop() keeps running (watchdog, telemetry); show_hidden: a hidden tower still shows up
+  if (WiFi.scanNetworks(true, true) == WIFI_SCAN_FAILED) {
+    Serial.print("N scan: failed\n");
+    return;
+  }
+  g_scanning = true;
+  g_scanStartMs = millis();
+  Serial.print("N scan: started\n");
+}
+
 void poll(uint32_t nowMs) {
+  if (g_scanning) pollScan(nowMs);
   if (g_state == WifiState::Connected) {
     if (WiFi.status() != WL_CONNECTED) {
       Serial.print("N wifi: connection lost, reconnecting\n");
@@ -120,7 +225,7 @@ void poll(uint32_t nowMs) {
                   (int)WiFi.RSSI());
     return;
   }
-  if (s == WL_CONNECT_FAILED) {
+  if (s == WL_CONNECT_FAILED || g_authFails >= AUTH_FAILS_WRONG_PASSWORD) {
     Serial.print("N wifi: failed, wrong password?\n");
     WiFi.disconnect();
     g_state = WifiState::Failed;
@@ -140,6 +245,10 @@ void poll(uint32_t nowMs) {
 
 void get() {
   stopAllThrusters();
+  if (g_scanning) {  // a scan hops channels: the request would likely time out
+    stopScan();
+    Serial.print("N scan: cancelled (GET)\n");
+  }
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.print("N http error: wifi not connected (send M first)\n");
@@ -152,13 +261,16 @@ void get() {
   Serial.printf("N get: %s\n", g_url);
 
   const bool https = strncmp(g_url, "https://", 8) == 0;
+  // Both clients are declared BEFORE http: ~HTTPClient() may still call stop() on its client, so the
+  // client must outlive it (a deleted WiFiClientSecure there crashed the board).
   WiFiClient plain;
-  WiFiClientSecure* secure = nullptr;
+  std::unique_ptr<WiFiClientSecure> secure;
   WiFiClient* client = &plain;
   if (https) {
-    secure = new WiFiClientSecure();
+    secure.reset(new WiFiClientSecure());
     secure->setInsecure();  // a competition tower has no certificate we could check
-    client = secure;
+    secure->setHandshakeTimeout(HTTP_CONNECT_TIMEOUT_MS / 1000);  // seconds; the default is 120 s
+    client = secure.get();
   }
 
   HTTPClient http;
@@ -198,7 +310,6 @@ void get() {
     }
     http.end();
   }
-  delete secure;
   afterBlockingGet();
 }
 

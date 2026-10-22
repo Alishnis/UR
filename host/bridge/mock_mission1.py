@@ -11,6 +11,10 @@ from typing import Callable
 
 SAMPLE_TEXT = "Congratulations!!! This is the WiFi API task message for the fall training."
 SAMPLE_NETWORKS = {"UR_Field": "12345678"}  # ssid -> password ("" = open network)
+# What the mock radio "hears" besides the known networks: (ssid, rssi, channel, open)
+NEIGHBOURS = (("CityU-Guest", -67, 1, True), ("eduroam", -74, 11, False), ("", -88, 6, False))
+SCAN_MS = 1500
+MAX_SCAN_SHOWN = 15
 
 WIFI_CONNECT_TIMEOUT_MS = 15000
 MAX_BODY_BYTES = 2048
@@ -69,22 +73,57 @@ class MockMission1:
         self.url = ""
         self._start_ms = 0
         self._reported_no_ssid = False
+        self._scan_start: int | None = None
 
     # -- commands ---------------------------------------------------------
     def connect(self, ssid: str, password: str, now: int) -> None:
         self._stop_thrusters()
+        if self._scan_start is not None:
+            self._scan_start = None
+            self._emit("N scan: cancelled (joining Wi-Fi)")
         self.ssid, self.password = ssid, password
-        self.state = "connecting"
         self._start_ms = now
         self._reported_no_ssid = False
+        if 0 < len(password) < 8:  # WiFi.begin() refuses a WPA2 key this short
+            self.state = "failed"
+            self._emit("N wifi: failed to start joining (a WPA2 password needs 8-63 characters)")
+            return
+        self.state = "connecting"
         self._emit(f"N wifi: connecting to {ssid}")
 
     def set_url(self, url: str) -> None:
         self.url = url
         self._emit(f"N url set: {url}")
 
+    def scan(self, now: int) -> None:
+        if self._scan_start is not None:
+            self._emit("N scan: already running")
+            return
+        if self.state == "connecting":
+            self._emit("N scan: busy joining Wi-Fi, scan again when it is connected or failed")
+            return
+        self._scan_start = now
+        self._emit("N scan: started")
+
+    def scan_result(self) -> list[tuple[str, int, int, bool]]:
+        """(ssid, rssi, channel, open) strongest first, like the firmware."""
+        nets = [(ssid, -48 - 9 * i, 6, pw == "") for i, (ssid, pw) in enumerate(self.networks.items())]
+        return sorted(nets + list(NEIGHBOURS), key=lambda n: -n[1])
+
+    def _finish_scan(self) -> None:
+        nets = self.scan_result()
+        self._emit(f"N scan: {len(nets)} networks")
+        for ssid, rssi, ch, is_open in nets[:MAX_SCAN_SHOWN]:
+            name = "".join(c if 0x20 <= ord(c) <= 0x7E else "?" for c in ssid[:32]) or "(hidden)"
+            self._emit(f"N net: {rssi} dBm ch {ch} {'open' if is_open else 'secured'} {name}")
+        if len(nets) > MAX_SCAN_SHOWN:
+            self._emit(f"N scan: ({len(nets) - MAX_SCAN_SHOWN} more not shown)")
+
     def get(self, now: int) -> None:
         self._stop_thrusters()
+        if self._scan_start is not None:
+            self._scan_start = None
+            self._emit("N scan: cancelled (GET)")
         if self.state != "connected":
             self._emit("N http error: wifi not connected (send M first)")
             return  # no blocking call happened: input is not flushed
@@ -107,7 +146,10 @@ class MockMission1:
             self._emit(f"N http error {code}")
             return
         kept = body[:MAX_BODY_BYTES]
-        self._emit(f"N http {code}, {len(body)} bytes")
+        # the firmware stops reading past 4x the cap (128-byte reads), so it counts at most ~that much
+        cap = 4 * MAX_BODY_BYTES
+        seen = len(body) if len(body) <= cap else min(len(body), (cap // 128 + 1) * 128)
+        self._emit(f"N http {code}, {seen} bytes")
         lines, dropped = body_lines(kept, MAX_GOT_LINES, MAX_GOT_LINE_LEN)
         for line in lines:
             self._emit(f"N got: {line}")
@@ -120,6 +162,9 @@ class MockMission1:
 
     # -- progress (called from tick) --------------------------------------------
     def poll(self, now: int) -> None:
+        if self._scan_start is not None and now - self._scan_start >= SCAN_MS:
+            self._scan_start = None
+            self._finish_scan()
         if self.state == "connected":
             if self.ssid not in self.networks:  # the tower disappeared
                 self._emit("N wifi: connection lost, reconnecting")

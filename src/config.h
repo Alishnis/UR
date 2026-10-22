@@ -18,8 +18,9 @@ constexpr bool DRY_RUN = false;
 // ---------------------------------------------------------------------------
 
 constexpr size_t NUM_ESC = 3;
-constexpr uint8_t ESC_PINS[NUM_ESC] = {1, 42, 40};      // left, right, vertical
-constexpr uint8_t READBACK_PINS[NUM_ESC] = {4, 5, 6};   // jumpered to ESC_PINS
+// Wiring checked in the lab 2026-10-21: io1 left, io40 right, io42 vertical.
+constexpr uint8_t ESC_PINS[NUM_ESC] = {1, 40, 42};      // left, right, vertical
+constexpr uint8_t READBACK_PINS[NUM_ESC] = {4, 6, 5};   // jumpers: io1-io4, io40-io6, io42-io5
 constexpr const char* ESC_NAMES[NUM_ESC] = {"left", "right", "vert"};
 
 // ---------------------------------------------------------------------------
@@ -37,6 +38,13 @@ constexpr int US_PER_UNIT = ESC_BIDIRECTIONAL ? 500 : 1000;  // us for value 1.0
 // Hard clamp, cannot be bypassed from the laptop: NEUTRAL_US +/- MAX_DELTA_US.
 // 150 us = 30 % of the bidirectional range. Raise only after pool tests.
 constexpr int MAX_DELTA_US = 150;
+
+// Per-ESC stop correction, added to every pulse of that output (ESC_PINS order).
+// An ESC whose real stop is not at NEUTRAL_US twitches every ~2 s at "neutral".
+// Find it with drive_test ([ ] keys): the middle of the range where the motor is still.
+// right (io40): still at 1460..1495 us (lab, 2026-10-21) -> 1478 us.
+// Telemetry (T) and the GUI keep showing NEUTRAL_US-based widths; R shows the real pulse.
+constexpr int NEUTRAL_TRIM_US[NUM_ESC] = {0, -22, 0};
 
 constexpr int MIN_US = ESC_BIDIRECTIONAL ? NEUTRAL_US - MAX_DELTA_US : NEUTRAL_US;
 constexpr int MAX_US = NEUTRAL_US + MAX_DELTA_US;
@@ -77,6 +85,8 @@ constexpr size_t MAX_GOT_LINE_LEN = 300;             // longer lines are cut
 // Wi-Fi transmit power in quarter dBm (78 = 19.5 dBm, the default). Lower it (e.g. 44 = 11 dBm)
 // if the board resets when Wi-Fi starts: weak USB supply / long cable (brownout).
 constexpr int WIFI_TX_POWER_QDBM = 78;
+constexpr uint32_t WIFI_SCAN_TIMEOUT_MS = 10000;     // L: a scan normally takes 2-4 s
+constexpr size_t MAX_SCAN_SHOWN = 15;                // "N net:" lines per scan, strongest first
 
 // ---------------------------------------------------------------------------
 // Readback self-check
@@ -127,4 +137,12 @@ constexpr bool pinsDistinct() {
 static_assert(pinsValid(), "ESC_PINS / READBACK_PINS contain a forbidden or non-PWM pin");
 static_assert(pinsDistinct(), "every ESC and readback pin must be different");
 static_assert(MAX_DELTA_US > 0 && MAX_DELTA_US <= 500, "MAX_DELTA_US out of range");
+
+constexpr bool trimsValid() {
+  for (size_t i = 0; i < NUM_ESC; i++) {
+    if (NEUTRAL_TRIM_US[i] < -50 || NEUTRAL_TRIM_US[i] > 50) return false;
+  }
+  return true;
+}
+static_assert(trimsValid(), "NEUTRAL_TRIM_US must be within +-50 us");
 static_assert(MAX_LINE >= 40 && MAX_LINE <= 250, "MAX_LINE out of range");

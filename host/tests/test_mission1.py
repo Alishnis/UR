@@ -57,7 +57,7 @@ def test_password_is_never_echoed():
 
 def test_wrong_password():
     mock, out, advance = make()
-    send(mock, "M UR_Field nope")
+    send(mock, "M UR_Field wrongpass")
     advance(1500)
     assert n_lines(out)[-1] == "N wifi: failed, wrong password?"
     assert mock.m1.state == "failed"
@@ -65,7 +65,7 @@ def test_wrong_password():
 
 def test_unknown_ssid_reports_not_found_then_times_out_after_15_s():
     mock, out, advance = make()
-    send(mock, "M Nowhere pw")
+    send(mock, "M Nowhere password")
     advance(1500)
     assert n_lines(out)[-1].startswith('N wifi: SSID "Nowhere" not found')
     advance(13000)
@@ -79,7 +79,7 @@ def test_unknown_ssid_reports_not_found_then_times_out_after_15_s():
 
 def test_new_m_restarts_the_attempt():
     mock, out, advance = make()
-    send(mock, "M Nowhere pw")
+    send(mock, "M Nowhere password")
     advance(2000)
     send(mock, "M UR_Field 12345678")
     advance(1000)
@@ -212,3 +212,51 @@ def test_failed_get_precondition_does_not_flush_input():
     mock, out, advance = make()
     mock.feed(b"G\nD 0.1 0.1 0.1\n")  # not connected: instant error, no blocking call
     assert mock.us == [1550, 1550, 1550]
+
+
+def test_scan_lists_networks_strongest_first():
+    mock, out, advance = make()
+    send(mock, "L")
+    assert n_lines(out) == ["N scan: started"]
+    advance(1600)
+    lines = n_lines(out)[1:]
+    assert lines[0] == "N scan: 4 networks"
+    nets = [l for l in lines if l.startswith("N net: ")]
+    assert nets[0] == "N net: -48 dBm ch 6 secured UR_Field"
+    rssi = [int(l.split()[2]) for l in nets]
+    assert rssi == sorted(rssi, reverse=True)
+    assert "N net: -88 dBm ch 6 secured (hidden)" in nets
+    assert any(" open CityU-Guest" in l for l in nets)
+
+
+def test_scan_busy_while_joining_and_twice():
+    mock, out, advance = make()
+    send(mock, "M UR_Field 12345678", "L")
+    assert n_lines(out)[-1].startswith("N scan: busy joining Wi-Fi")
+    advance(1000)
+    send(mock, "L", "L")
+    assert n_lines(out)[-2:] == ["N scan: started", "N scan: already running"]
+
+
+def test_join_or_get_cancels_a_running_scan():
+    mock, out, advance = make()
+    send(mock, "L", "M UR_Field 12345678")
+    assert n_lines(out)[-2:] == ["N scan: cancelled (joining Wi-Fi)", "N wifi: connecting to UR_Field"]
+    advance(2000)
+    assert not any(l.startswith("N scan: 4") for l in out)  # the cancelled scan never reports
+    send(mock, "U http://192.168.4.1/", "L", "G")
+    assert "N scan: cancelled (GET)" in out
+    assert out[-1] == f"N got: {SAMPLE_TEXT}"
+
+
+def test_scan_does_not_touch_the_thrusters():
+    mock, out, advance = make()
+    send(mock, "D 0.1 0.1 0.1", "L")
+    assert mock.us == [1550, 1550, 1550]
+
+
+def test_short_wpa2_password_fails_at_once():
+    mock, out, advance = make()
+    send(mock, "M UR_Field 1234567")
+    assert n_lines(out) == ["N wifi: failed to start joining (a WPA2 password needs 8-63 characters)"]
+    assert mock.m1.state == "failed"

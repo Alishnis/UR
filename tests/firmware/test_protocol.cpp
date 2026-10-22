@@ -70,6 +70,11 @@ static void testSimpleCommands() {
   CHECK(typeOf("PING") == Cmd::Invalid);
   CHECK(typeOf("G") == Cmd::Get);
   CHECK(typeOf("G now") == Cmd::Invalid);
+  CHECK(typeOf("L") == Cmd::Scan);
+  CHECK(typeOf("  L \t") == Cmd::Scan);
+  CHECK(typeOf("L 1") == Cmd::Invalid);
+  CHECK(typeOf("LL") == Cmd::Invalid);
+  CHECK(typeOf("l") == Cmd::Invalid);
   CHECK(typeOf("X") == Cmd::Invalid);
   CHECK(typeOf("T 1500 1500 1500") == Cmd::Invalid);  // our own output echoed back
 

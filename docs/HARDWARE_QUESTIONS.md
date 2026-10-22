@@ -63,4 +63,22 @@ start from neutral, use the default low clamp (±150 µs).
   outputs its own signal. Then with power: PIN TEST `GPIO 1+` must spin exactly one
   motor. Write down which. Repeat for 42 and 40. Then fix `outputSlot` so that
   THRUSTER TEST `L` spins the left motor, etc.
-- **Result:** io1 → _?_, io42 → _?_, io40 → _?_
+- **Result (2026-10-21):** io1 → left, io40 → right, io42 → vert. `ESC_PINS` = {1, 40, 42}.
+
+## Q6. One motor twitches by itself every ~2 s (seen on io40, right)
+
+- **Code:** checked, no cause found. The firmware changes an output only on `D` / `S` or the
+  watchdog; with nothing commanded every ESC gets a steady 1500 µs. Look at the hardware.
+- **How to find it** (motor clamped, hand on the e-stop):
+  1. GUI log: does `ROV firmware ...` repeat? The GUI warns "ESP32 restarted ..." with the
+     reason. Restarts mean power: ESP32 supply, common GND, ESC red wires not on the ESP32 5 V.
+  2. No restarts: the VERT bar shows `1500 us` and the self-check shows
+     `right io40->io6: 1500us 50Hz ok` while the motor twitches → the pin sends clean neutral.
+  3. Then it is the ESC side. A twitch every ~2 s at neutral is usually the ESC beeping through
+     the motor windings because it does not see a valid signal: check that ESC's signal and
+     GND wires (the re-soldered harness). Swap its signal plug with another ESC's: the twitch stays
+     on the same motor → ESC / motor / its cable; it moves → the wire from io40.
+  4. Same motor: its ESC's stop is off 1500 µs. In drive_test find the range where it is
+     still (`n`, `[`, `]`) and put the middle into `NEUTRAL_TRIM_US` in `src/config.h`.
+- **Result (2026-10-21):** no restarts; the twitch follows the right (io40) ESC/motor. Still at
+  1460–1495 µs → `NEUTRAL_TRIM_US` right = −22 (1478 µs).

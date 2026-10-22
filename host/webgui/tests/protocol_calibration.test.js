@@ -29,6 +29,18 @@ test('parseLine: boot banner lines', () => {
   assert.equal(parseLine('ROV watchdog 500 ms').boot, undefined);
 });
 
+test('parseLine: reset reason, crash and power problems are flagged', () => {
+  const ok = parseLine('ROV reset reason: power-on');
+  assert.equal(ok.kind, 'banner');
+  assert.equal(ok.resetReason, 'power-on');
+  assert.equal(ok.resetBad, false);
+  assert.equal(parseLine('ROV reset reason: BROWNOUT (supply voltage dropped)').resetBad, true);
+  assert.equal(parseLine('ROV reset reason: CRASH (task watchdog)').resetBad, true);
+  assert.equal(parseLine('ROV reset reason: POWER GLITCH').resetBad, true);
+  assert.equal(parseLine('ROV reset reason: software').resetBad, false);
+  assert.equal(parseLine('ROV firmware 0.2.1').resetReason, undefined);
+});
+
 test('parseLine: readback report, live and dry run', () => {
   const live = parseLine('R left io1->io4: 1500us 50Hz sent 1500 ok | right io42->io5: 1450us 50Hz sent 1500 MISMATCH | vert io40->io6: no signal (LOW) sent 1500');
   assert.equal(live.kind, 'R');

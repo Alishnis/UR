@@ -16,12 +16,12 @@ ROOT = Path(__file__).resolve().parents[2]
 DUMP_SRC = ROOT / "tests" / "firmware" / "parse_dump.cpp"
 
 VALID = [
-    "D 0 0 0", "D 0.100 -0.250 1.000", "D -1 1 -0", "D +.5 -.5 1.", "S", "P", "G",
+    "D 0 0 0", "D 0.100 -0.250 1.000", "D -1 1 -0", "D +.5 -.5 1.", "S", "P", "G", "L", " L\t",
     "R", "R 1", "R 0", "M UR_Field 12345678", "M Net pass with spaces", "M Open",
     "U http://192.168.4.1/t.txt", "U https://x/y", "D 0.001 -0.001 0.0005",
     "D 0.3 0.31 -0.299", "D 1.0000 -1.000 0.999",
 ]
-ALPHABET = "DSPRMUGdx 0123456789.+-\t,eEnaifhtp:/_"
+ALPHABET = "DSPRMUGLdx 0123456789.+-\t,eEnaifhtp:/_"
 
 
 def _fuzz_lines(n: int, seed: int) -> list[str]:
@@ -90,4 +90,4 @@ def test_python_mock_parses_like_firmware(dump_bin: Path) -> None:
         f"  line={l!r}\n    fw={f}\n    py={p}" for l, f, p in mismatches[:5])
     # Sanity: the fuzz set really exercises both accepted and rejected lines.
     kinds = {f.split("|", 1)[0] for f in fw}
-    assert {"drive", "invalid", "stop", "ping", "report", "wifi", "url", "get"} <= kinds
+    assert {"drive", "invalid", "stop", "ping", "report", "wifi", "url", "get", "scan"} <= kinds

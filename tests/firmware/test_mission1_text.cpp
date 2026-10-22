@@ -125,10 +125,40 @@ static void testLines() {
   CHECK(v.size() == 1 && v[0].size() == 511);
 }
 
+static void testScanList() {
+  const int rssi[] = {-80, -48, -90, -48, -60, -95};
+  size_t order[4];
+  const size_t k = m1text::strongestFirst(rssi, 6, order, 4);
+  CHECK(k == 4);
+  CHECK(order[0] == 1 && order[1] == 3);  // equal RSSI keeps scan order
+  CHECK(order[2] == 4 && order[3] == 0);
+  size_t one[1];
+  CHECK(m1text::strongestFirst(rssi, 6, one, 1) == 1 && one[0] == 1);
+  CHECK(m1text::strongestFirst(rssi, 0, order, 4) == 0);
+  size_t all[8];
+  CHECK(m1text::strongestFirst(rssi, 6, all, 8) == 6 && all[5] == 5);
+
+  char line[80];
+  m1text::formatNet(line, sizeof(line), -48, 6, false, "UR_Field");
+  CHECK(std::string(line) == "-48 dBm ch 6 secured UR_Field");
+  m1text::formatNet(line, sizeof(line), -71, 11, true, "Cafe Free WiFi");
+  CHECK(std::string(line) == "-71 dBm ch 11 open Cafe Free WiFi");
+  m1text::formatNet(line, sizeof(line), -90, 1, false, "");
+  CHECK(std::string(line) == "-90 dBm ch 1 secured (hidden)");
+  m1text::formatNet(line, sizeof(line), -50, 3, false, "caf\xc3\xa9\x01");
+  CHECK(std::string(line) == "-50 dBm ch 3 secured caf???");
+  m1text::formatNet(line, sizeof(line), -50, 3, false, "0123456789012345678901234567890123456789");
+  CHECK(std::string(line) == "-50 dBm ch 3 secured 01234567890123456789012345678901");  // 32 max
+  char tiny[8];
+  m1text::formatNet(tiny, sizeof(tiny), -50, 3, false, "x");
+  CHECK(std::string(tiny) == "-50 dBm");
+}
+
 int main() {
   testChunked();
   testBody();
   testLines();
+  testScanList();
   printf("%d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

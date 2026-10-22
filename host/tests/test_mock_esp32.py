@@ -43,6 +43,8 @@ def send(mock: MockEsp32, *lines: str) -> None:
 def test_boot_banner_and_neutral(rig):
     mock, out, advance, _ = rig
     assert any(l.startswith("ROV mode: LIVE") for l in out)
+    assert "ROV reset reason: power-on" in out
+    assert "ROV ESC neutral trim: left +0, right -22, vert +0 us" in out
     assert mock.us == [1500, 1500, 1500]
     advance(4000)
     assert "ROV ready, accepting commands" in out
@@ -175,8 +177,8 @@ def test_readback_once_stream_stop(rig):
     arm()
     send(mock, "D 0.1 -0.1 0.2", "R")
     assert out[-1] == ("R left io1->io4: 1550us 50Hz sent 1550 ok | "
-                       "right io42->io5: 1450us 50Hz sent 1450 ok | "
-                       "vert io40->io6: 1600us 50Hz sent 1600 ok")
+                       "right io40->io6: 1428us 50Hz sent 1428 ok | "  # 1450 - 22 us trim on the pin
+                       "vert io42->io5: 1600us 50Hz sent 1600 ok")
     out.clear()
     send(mock, "R 1")
     for _ in range(4):

@@ -24,6 +24,8 @@ test('validatePassword: may be empty (open network), limited to 63 printable cha
   assert.equal(validatePassword('p'.repeat(63)), null);
   assert.match(validatePassword('p'.repeat(64)), /longer than 63/);
   assert.match(validatePassword('ü'), /ASCII/);
+  assert.match(validatePassword('1234567'), /8-63 characters/); // WiFi.begin() refuses it
+  assert.equal(validatePassword('12345678'), null);
 });
 
 test('validateUrl', () => {
@@ -86,7 +88,7 @@ test('state: successful join and GET shows the text', () => {
   assert.equal(s.ip, '192.168.4.2');
   s = reduce(s, parseNLine('get: http://x/'));
   assert.equal(s.getting, true);
-  assert.equal(bigText(s), '...');
+  assert.equal(bigText(s), '...'); // nothing received yet
   for (const e of ['http 200, 77 bytes', 'got: Congratulations!!! This is the message.']) s = reduce(s, parseNLine(e));
   assert.equal(s.getting, false);
   assert.equal(bigText(s), 'Congratulations!!! This is the message.');

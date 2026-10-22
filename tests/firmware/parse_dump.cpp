@@ -19,6 +19,7 @@ static const char* typeName(proto::Cmd t) {
     case proto::Cmd::WifiJoin: return "wifi";
     case proto::Cmd::SetUrl: return "url";
     case proto::Cmd::Get: return "get";
+    case proto::Cmd::Scan: return "scan";
   }
   return "?";
 }

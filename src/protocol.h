@@ -21,6 +21,7 @@ enum class Cmd : uint8_t {
   WifiJoin,  // M <ssid> [password]
   SetUrl,    // U <url>
   Get,       // G
+  Scan,      // L: list the Wi-Fi networks the ESP32 can see
 };
 
 enum class ReportMode : int8_t { Once = -1, StreamOff = 0, StreamOn = 1 };
@@ -126,6 +127,10 @@ inline Command parseLineRaw(const char* line) {
     case 'G':
       if (*a != '\0') return cmd;
       cmd.type = Cmd::Get;
+      return cmd;
+    case 'L':
+      if (*a != '\0') return cmd;
+      cmd.type = Cmd::Scan;
       return cmd;
     case 'R':
       if (*a == '\0') {

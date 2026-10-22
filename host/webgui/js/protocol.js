@@ -6,7 +6,8 @@
 //   W / N  {text}
 //   B      {text}               bridge status line
 //   R      {text, dry, outputs:[{name, io, rb, state:'ok'|'mismatch'|'nosignal'|'stuck'|'measuring', text}]}
-//   banner {text}               "ROV ..." boot lines; {mode:'LIVE'|'DRY RUN'} on the mode line, {ready:true}, {boot:true}
+//   banner {text}               "ROV ..." boot lines; {mode:'LIVE'|'DRY RUN'} on the mode line, {ready:true}, {boot:true},
+//                               {resetReason, resetBad} on the reset reason line (resetBad: crash or power problem)
 //   other  {text}
 export function parseLine(line) {
   const text = String(line).trim();
@@ -25,6 +26,11 @@ export function parseLine(line) {
     if (text.startsWith('ROV firmware ')) out.boot = true;
     m = /^ROV mode: (LIVE|DRY RUN)/.exec(text);
     if (m) out.mode = m[1];
+    m = /^ROV reset reason: (.+)$/.exec(text);
+    if (m) {
+      out.resetReason = m[1];
+      out.resetBad = /CRASH|BROWNOUT|GLITCH/.test(m[1]);
+    }
     if (text === 'ROV ready, accepting commands') out.ready = true;
     return out;
   }

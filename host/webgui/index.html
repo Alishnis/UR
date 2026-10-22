@@ -14,14 +14,200 @@
     <span class="chip" id="chip-esp" title="ESP32 alive = any line within 1.5 s">ESP: &hellip;</span>
     <span class="chip" id="chip-fw" title="Firmware mode, from the boot banner or the R report">Firmware: ?</span>
     <span class="chip" id="chip-ping" title="Round trip browser to ESP32 and back">Ping: &ndash;</span>
-    <span class="chip dim" id="chip-vision" title="AprilTag detection (phase 4)">Vision: &ndash;</span>
-    <span class="chip dim" id="chip-fps" title="Camera frames per second (phase 4)">FPS: &ndash;</span>
+    <span class="chip dim" id="chip-vision" title="Vision service in the bridge (camera missions 2-5)">Vision: &ndash;</span>
+    <span class="chip dim" id="chip-fps" title="Camera frames per second / detector results per second">FPS: &ndash;</span>
     <span class="chip" id="chip-keys" title="Keyboard driving is paused while a text field has focus">Keys: active</span>
   </header>
 
   <div id="notice" role="status" aria-live="polite" hidden></div>
 
   <main>
+    <section class="panel wide" id="panel-camera" aria-label="Camera and missions 2-5">
+      <div class="camhead">
+        <h2>Camera</h2>
+        <div class="tabs" role="tablist" id="cam-tabs" aria-label="Mission">
+          <button type="button" role="tab" class="tab" id="tab-drive" data-tab="drive" aria-controls="side-drive" aria-selected="true">Drive</button>
+          <button type="button" role="tab" class="tab" id="tab-m21" data-tab="m21" aria-controls="side-m21" aria-selected="false">2.1 Tags</button>
+          <button type="button" role="tab" class="tab" id="tab-m22" data-tab="m22" aria-controls="side-m22" aria-selected="false">2.2 Dock</button>
+          <button type="button" role="tab" class="tab" id="tab-m3" data-tab="m3" aria-controls="side-m3" aria-selected="false">3 Line</button>
+          <button type="button" role="tab" class="tab" id="tab-m4" data-tab="m4" aria-controls="side-m4" aria-selected="false">4 Hook</button>
+          <button type="button" role="tab" class="tab" id="tab-m5" data-tab="m5" aria-controls="side-m5" aria-selected="false">5 Poles</button>
+        </div>
+        <div class="camctl">
+          <select id="cam-source" aria-label="Video source"></select>
+          <button type="button" id="cam-start" class="btn small">Start</button>
+          <div class="clock" id="clock" title="Attempt clock (20 min for the tasks). Survives a page reload.">
+            <span id="clock-text" class="clocktext">20:00</span>
+            <button type="button" id="clock-start" class="btn small">Start</button>
+            <button type="button" id="clock-reset" class="btn small">Reset</button>
+          </div>
+          <button type="button" id="cam-big" class="btn small" aria-pressed="false" title="Camera fills the window (Esc is still E-STOP)">Big view</button>
+        </div>
+      </div>
+
+      <div class="cambody">
+        <div class="stagecol">
+          <div class="stage" id="cam-stage">
+            <video id="cam-video" muted playsinline autoplay></video>
+            <canvas id="cam-overlay"></canvas>
+            <div class="placeholder" id="cam-placeholder">No camera. Pick a source and press Start.</div>
+          </div>
+          <div class="stagebar">
+            <details class="filters" id="cam-filters">
+              <summary>View filters <small>picture only, the detector gets the raw frame</small></summary>
+              <label class="slider"><span>Brightness</span><input type="range" id="cam-bright" min="50" max="250" step="5" aria-label="Brightness"><output id="cam-bright-out"></output></label>
+              <label class="slider"><span>Contrast</span><input type="range" id="cam-contrast" min="50" max="250" step="5" aria-label="Contrast"><output id="cam-contrast-out"></output></label>
+              <label class="slider"><span>Saturation</span><input type="range" id="cam-sat" min="0" max="300" step="5" aria-label="Saturation"><output id="cam-sat-out"></output></label>
+              <button type="button" id="cam-filter-reset" class="btn small">Reset</button>
+            </details>
+            <div class="simbar" id="sim-bar" hidden>
+              <span class="simtag">SIMULATOR</span>
+              <span id="sim-scene"></span>
+              <button type="button" id="sim-reset" class="btn small">Reset position</button>
+              <small>W A S D R F move it, also while DISARMED</small>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side" id="cam-side">
+          <div class="sidepane" id="side-drive" role="tabpanel" aria-labelledby="tab-drive">
+            <h3>Pilot view</h3>
+            <ul class="helplist">
+              <li><b>Top left</b> ARMED / DISARMED</li>
+              <li><b>Top right</b> attempt clock</li>
+              <li><b>Bottom left</b> active mission</li>
+              <li><b>Bottom right</b> detector time per frame</li>
+            </ul>
+            <p class="hint">Drive sends no frames to the detector. Pick a mission tab for its overlay and hints. Big view makes the picture fill the window.</p>
+            <h3>Camera lens</h3>
+            <label class="field">HFOV in air, deg <input type="number" id="cam-hfov" min="20" max="170" step="1"></label>
+            <label class="check"><input type="checkbox" id="cam-underwater"> Underwater (flat port shrinks the view)</label>
+            <p class="hint" id="cam-hfov-eff"></p>
+          </div>
+
+          <div class="sidepane" id="side-m21" role="tabpanel" aria-labelledby="tab-m21" hidden>
+            <div class="seg" id="m21-rule" role="group" aria-label="Rule from the referee">
+              <button type="button" class="segbtn" data-rule="largest" aria-pressed="false">LARGEST</button>
+              <button type="button" class="segbtn" data-rule="smallest" aria-pressed="false">SMALLEST</button>
+            </div>
+            <div class="vbig" id="m21-big" aria-live="polite">Pick LARGEST or SMALLEST</div>
+            <div class="vsub" id="m21-sub"></div>
+            <div class="rowlabel">Confirmed <span id="m21-count" class="count">0 / 3</span></div>
+            <div class="tagchips" id="m21-confirmed"></div>
+            <div class="rowlabel">In view now</div>
+            <div class="tagchips" id="m21-inview"></div>
+            <div class="btnrow">
+              <button type="button" id="m21-undo" class="btn small">Undo last</button>
+              <button type="button" id="m21-reset" class="btn small">Reset</button>
+            </div>
+            <p class="hint" id="m21-status"></p>
+            <details class="sub">
+              <summary>Detector</summary>
+              <label class="check"><input type="checkbox" id="m21-clahe"> CLAHE second pass (faint tags, murky water)</label>
+              <label class="field">Min margin <input type="number" id="m21-margin" min="0" max="200" step="1"></label>
+              <p class="hint">An id counts after it was seen in several frames. Grey dashed <b>ID n?</b> = seen but not trusted (below the min margin): lower it a little if a real tag stays grey. Undo removes a wrong one and ignores it until Reset.</p>
+            </details>
+          </div>
+
+          <div class="sidepane" id="side-m22" role="tabpanel" aria-labelledby="tab-m22" hidden>
+            <div class="fieldrow">
+              <label class="field">Target tag ID <input type="number" id="m22-target" min="0" max="586" step="1"></label>
+              <button type="button" id="m22-use" class="btn small">Use 2.1 result</button>
+            </div>
+            <p class="hint" id="m22-from21"></p>
+            <div class="vbig" id="m22-big" aria-live="polite">TARGET NOT IN VIEW</div>
+            <div class="vsub" id="m22-hint"></div>
+            <dl class="nums">
+              <dt>Distance</dt><dd id="m22-dist">&ndash;</dd>
+              <dt>Bearing</dt><dd id="m22-bearing">&ndash;</dd>
+              <dt>Height offset</dt><dd id="m22-vert">&ndash;</dd>
+              <dt>Tag yaw</dt><dd id="m22-yaw">&ndash;</dd>
+            </dl>
+            <p class="hint">Dock in the chamber marked by the target tag. No contact = 20 pts, contact = 10. Distance needs the right HFOV (Drive tab).</p>
+          </div>
+
+          <div class="sidepane" id="side-m3" role="tabpanel" aria-labelledby="tab-m3" hidden>
+            <p class="manual">Manual piloting only: hints are advice</p>
+            <div class="vbig" id="m3-big" aria-live="polite">LINE LOST</div>
+            <div class="gauge" id="m3-gauge" aria-hidden="true">
+              <div class="gauge-dead" id="m3-dead"></div>
+              <div class="gauge-mid"></div>
+              <div class="gauge-needle" id="m3-needle"></div>
+              <span class="gauge-l">YAW LEFT</span><span class="gauge-r">YAW RIGHT</span>
+            </div>
+            <dl class="nums">
+              <dt>Angle</dt><dd id="m3-angle">&ndash;</dd>
+              <dt>Offset</dt><dd id="m3-offset">&ndash;</dd>
+              <dt>Confidence</dt><dd id="m3-conf">&ndash;</dd>
+            </dl>
+            <h3>Checkpoints</h3>
+            <div class="track" id="m3-track"></div>
+            <div class="vmid" id="m3-label">Before the start tape</div>
+            <div class="btnrow">
+              <button type="button" id="m3-minus" class="btn small">&minus;1</button>
+              <button type="button" id="m3-plus" class="btn small">+1</button>
+              <button type="button" id="m3-reset" class="btn small">Reset</button>
+            </div>
+            <p class="hint">A tape counts when it crosses the dashed amber row; the START tape counts too. Fix a miss with &minus;1 / +1.</p>
+            <label class="check"><input type="checkbox" id="m3-auto"> Count tapes automatically</label>
+            <label class="slider"><span>Dark threshold</span><input type="range" id="m3-dark" min="5" max="120" step="1" aria-label="Dark threshold"><output id="m3-dark-out"></output></label>
+            <label class="check"><input type="checkbox" id="m3-mask"> Show mask (what the detector calls dark)</label>
+          </div>
+
+          <div class="sidepane" id="side-m4" role="tabpanel" aria-labelledby="tab-m4" hidden>
+            <p class="manual">Manual piloting only</p>
+            <div class="holdbox">
+              <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+                <circle class="ring-fg" id="m4-ring" cx="60" cy="60" r="52"></circle>
+              </svg>
+              <div class="holdtext"><span id="m4-time">0.0</span><small id="m4-need">s / 3.0 s</small></div>
+            </div>
+            <button type="button" id="m4-toggle" class="btn holdbtn"><span id="m4-toggle-text">Hooked: start</span> <kbd>H</kbd></button>
+            <div class="secured" id="m4-secured" aria-live="polite">Hold 3 s clear of the ground</div>
+            <div class="rowlabel">Best hold <span id="m4-best" class="count">&ndash;</span></div>
+            <div class="btnrow">
+              <button type="button" id="m4-reset" class="btn small">Reset</button>
+              <button type="button" id="m4-aim" class="btn small" aria-pressed="false">Set hook point</button>
+            </div>
+            <p class="hint" id="m4-aim-hint">Set hook point, then click the video where the hook is: a reticle stays there.</p>
+          </div>
+
+          <div class="sidepane" id="side-m5" role="tabpanel" aria-labelledby="tab-m5" hidden>
+            <div class="fieldrow">
+              <label class="field">Order <input type="text" id="m5-order" placeholder="R-B-Y" maxlength="32" autocomplete="off" spellcheck="false"></label>
+              <button type="button" id="m5-set" class="btn small">Set</button>
+            </div>
+            <div class="seq" id="m5-seq"></div>
+            <div class="vbig" id="m5-big" aria-live="polite">Type the referee's order</div>
+            <div class="vsub" id="m5-hint"></div>
+            <div class="btnrow">
+              <button type="button" id="m5-hit" class="btn">Ball dropped &#10003;</button>
+              <button type="button" id="m5-undo" class="btn small">Undo</button>
+              <button type="button" id="m5-reset" class="btn small">Reset</button>
+            </div>
+            <details class="sub" id="m5-calib">
+              <summary>Colour calibration</summary>
+              <div class="fieldrow">
+                <select id="m5-color" aria-label="Colour to calibrate"></select>
+                <button type="button" id="m5-sample" class="btn small" aria-pressed="false">Sample: click the pole</button>
+              </div>
+              <div class="swatch" id="m5-swatch" aria-hidden="true"></div>
+              <div class="hsv" id="m5-sliders"></div>
+              <label class="check"><input type="checkbox" id="m5-mask"> Show mask for this colour</label>
+              <div class="btnrow">
+                <button type="button" id="m5-color-reset" class="btn small">Reset colour</button>
+                <button type="button" id="m5-export" class="btn small">Export</button>
+                <button type="button" id="m5-import" class="btn small">Import</button>
+                <input type="file" id="m5-file" accept=".json,application/json" hidden>
+              </div>
+              <p class="hint">Click = new range from the clicked spot. Shift+click = widen the range to include it. Calibrate in the pool, not in air.</p>
+            </details>
+          </div>
+        </aside>
+      </div>
+    </section>
+
     <section class="panel" id="panel-drive">
       <h2>Drive</h2>
       <div class="armrow">
@@ -52,6 +238,7 @@
           <tr><td><kbd>J</kbd> <kbd>K</kbd></td><td>lower / raise magnitude</td></tr>
           <tr><td><kbd>Space</kbd></td><td>hold: all zero</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>E-STOP (disarm), works while typing</td></tr>
+          <tr><td><kbd>H</kbd></td><td>hold timer start / stop (camera tab 4 Hook)</td></tr>
         </table>
       </details>
     </section>
@@ -98,15 +285,35 @@
           <div class="m1buttons">
             <button type="button" id="m1-connect" class="btn">Connect</button>
             <button type="button" id="m1-get" class="btn">GET</button>
+            <button type="button" id="m1-scan" class="btn" title="List the Wi-Fi networks the ESP32 itself can hear">Scan</button>
           </div>
+          <div class="m1auto">
+            <button type="button" id="m1-auto" class="btn m1autobtn">Auto: Connect + GET</button>
+            <label class="check"><input type="checkbox" id="m1-keep"> keep fetching every 10 s</label>
+          </div>
+          <div id="m1-autostate" class="m1autostate" aria-live="polite"></div>
           <div id="m1-wifi" class="m1wifi">Wi-Fi: not connected</div>
           <p class="hint" id="m1-hint"></p>
+          <div class="m1scan" id="m1-scanbox" hidden>
+            <div class="m1label">Networks the ESP32 hears <span id="m1-scan-meta"></span></div>
+            <div id="m1-nets" class="m1nets"></div>
+            <p id="m1-scan-advice" class="m1advice"></p>
+          </div>
         </div>
         <div class="m1result">
-          <div class="m1label">Received by the ESP32</div>
+          <div class="m1resulthead">
+            <div class="m1label">Received by the ESP32</div>
+            <button type="button" id="m1-show" class="btn small">Show to referee</button>
+          </div>
           <div id="m1-text" class="m1text" aria-live="polite">&mdash;</div>
+          <div id="m1-meta" class="m1meta"></div>
           <div id="m1-notes" class="hint"></div>
           <div id="m1-log" class="log m1log" aria-live="off"></div>
+          <details class="m1hist">
+            <summary>History <span id="m1-hist-count"></span></summary>
+            <div id="m1-hist-list" class="m1histlist"></div>
+            <button type="button" id="m1-hist-clear" class="btn small">Clear history</button>
+          </details>
         </div>
       </div>
     </section>
@@ -116,6 +323,15 @@
       <div id="log" class="log" aria-live="off"></div>
     </section>
   </main>
+
+  <div id="m1-ref" class="m1ref" role="dialog" aria-modal="true" aria-labelledby="m1-ref-label" hidden>
+    <div class="m1refbox">
+      <div class="m1reflabel" id="m1-ref-label">Mission 1 &middot; text fetched by the ROV's ESP32 over Wi-Fi</div>
+      <div id="m1-ref-text" class="m1reftext"></div>
+      <div id="m1-ref-meta" class="m1refmeta"></div>
+      <button type="button" id="m1-ref-close" class="btn">Close <small>Esc</small></button>
+    </div>
+  </div>
 
   <script type="module" src="js/app.js"></script>
 </body>

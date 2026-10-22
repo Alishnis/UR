@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 namespace m1text {
@@ -147,6 +148,33 @@ LineStats forEachBodyLine(const char* body, size_t len, size_t maxLines, size_t 
     i = j + 1;
   }
   return st;
+}
+
+// Wi-Fi scan list: indexes of the strongest networks first (stable for equal RSSI), at most cap.
+// Returns how many were written to order[].
+inline size_t strongestFirst(const int* rssi, size_t n, size_t* order, size_t cap) {
+  size_t k = 0;
+  for (size_t i = 0; i < n; i++) {
+    // insertion into the sorted prefix; an entry weaker than all kept ones is dropped once full
+    size_t pos = k;
+    while (pos > 0 && rssi[order[pos - 1]] < rssi[i]) pos--;
+    if (pos >= cap) continue;
+    const size_t last = k < cap ? k : cap - 1;
+    for (size_t j = last; j > pos; j--) order[j] = order[j - 1];
+    order[pos] = i;
+    if (k < cap) k++;
+  }
+  return k;
+}
+
+// Text of one "N net:" line: "-48 dBm ch 6 secured UR_Field". The SSID goes last (it may contain
+// spaces) and is cleaned like body text; a hidden network shows as "(hidden)".
+inline void formatNet(char* out, size_t cap, int rssi, int channel, bool open, const char* ssid) {
+  char name[33];
+  const size_t n = strnlen(ssid, 32);
+  sanitize(name, sizeof(name), ssid, n);
+  snprintf(out, cap, "%d dBm ch %d %s %s", rssi, channel, open ? "open" : "secured",
+           n ? name : "(hidden)");
 }
 
 }  // namespace m1text

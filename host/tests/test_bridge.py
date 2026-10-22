@@ -64,7 +64,7 @@ def run(coro):
 
 # ---- validation (pure) ------------------------------------------------------
 
-@pytest.mark.parametrize("line", ["D 0.1 0.1 0.1", "S", "P", "G", "R", "R 1", "M net pw", "U http://x/", "  S  "])
+@pytest.mark.parametrize("line", ["D 0.1 0.1 0.1", "S", "P", "G", "R", "R 1", "M net pw", "U http://x/", "  S  ", "L"])
 def test_validate_accepts_gui_commands(line):
     assert validate_browser_line(line) is None
 

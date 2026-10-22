@@ -7,6 +7,7 @@
 // 1st one's output, so one pin drives two ESCs and another drives none.
 
 #include <Arduino.h>
+#include <esp_system.h>
 #include <esp_timer.h>
 #include <soc/gpio_reg.h>
 
@@ -15,23 +16,26 @@
 #include "protocol.h"
 #include "timing.h"
 
-static const char* FW_VERSION = "0.2.0";
+static const char* FW_VERSION = "0.2.1";
 
 // ---------------------------------------------------------------------------
 // Thruster outputs
 // ---------------------------------------------------------------------------
 
-static int g_us[NUM_ESC];        // width being output (or would be, in DRY_RUN)
+static int g_us[NUM_ESC];        // commanded width, NEUTRAL_US-based (telemetry shows this)
 static bool g_pwmOk[NUM_ESC];    // LEDC attached successfully
+
+// Width really on the pin (or that would be, in DRY_RUN): commanded + the ESC's trim.
+static int outUs(size_t i) { return g_us[i] + NEUTRAL_TRIM_US[i]; }
 
 static void writeUs(size_t i, int us) {
   us = proto::clampUs(us);
   g_us[i] = us;
   if (DRY_RUN || !g_pwmOk[i]) return;
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWrite(ESC_PINS[i], proto::usToDuty(us));
+  ledcWrite(ESC_PINS[i], proto::usToDuty(outUs(i)));
 #else
-  ledcWrite(i, proto::usToDuty(us));  // core 2.x: channel i
+  ledcWrite(i, proto::usToDuty(outUs(i)));  // core 2.x: channel i
 #endif
 }
 
@@ -136,16 +140,16 @@ static void printReadbackReport() {
     if (!s.seenEdge || (t - s.lastEdgeUs) > READBACK_SIGNAL_TIMEOUT_US) {
       const bool high = digitalRead(s.pin) == HIGH;
       n += (size_t)snprintf(out + n, sizeof(out) - n, "%s sent %d",
-                            high ? "stuck HIGH" : "no signal (LOW)", g_us[i]);
+                            high ? "stuck HIGH" : "no signal (LOW)", outUs(i));
     } else if (!s.haveWidth || !s.havePeriod || s.periodUs == 0) {
-      n += (size_t)snprintf(out + n, sizeof(out) - n, "measuring sent %d", g_us[i]);
+      n += (size_t)snprintf(out + n, sizeof(out) - n, "measuring sent %d", outUs(i));
     } else {
       const uint32_t hz = (1000000u + s.periodUs / 2) / s.periodUs;
-      const int diff = (int)s.widthUs - g_us[i];
+      const int diff = (int)s.widthUs - outUs(i);
       const bool ok = abs(diff) <= READBACK_TOLERANCE_US && hz >= READBACK_MIN_HZ &&
                       hz <= READBACK_MAX_HZ;
       n += (size_t)snprintf(out + n, sizeof(out) - n, "%luus %luHz sent %d %s",
-                            (unsigned long)s.widthUs, (unsigned long)hz, g_us[i],
+                            (unsigned long)s.widthUs, (unsigned long)hz, outUs(i),
                             ok ? "ok" : "MISMATCH");
     }
   }
@@ -229,6 +233,9 @@ static void handleLine(const char* line, uint32_t nowMs) {
     case proto::Cmd::Get:
       m1::get();
       return;
+    case proto::Cmd::Scan:
+      m1::scan();
+      return;
   }
 }
 
@@ -284,9 +291,31 @@ static void pollSerial(uint32_t nowMs) {
   }
 }
 
+// Why the chip started. Every restart drops the ESC pulses for a moment, so a board that keeps
+// restarting (weak supply, motor noise) makes the motors twitch. CRASH / BROWNOUT / GLITCH are
+// shown as a warning by the GUI, keep those words in the texts.
+static const char* resetReasonName(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON: return "power-on";
+    case ESP_RST_EXT: return "reset pin";
+    case ESP_RST_SW: return "software";
+    case ESP_RST_USB: return "USB";
+    case ESP_RST_DEEPSLEEP: return "deep sleep";
+    case ESP_RST_BROWNOUT: return "BROWNOUT (supply voltage dropped)";
+    case ESP_RST_PWR_GLITCH: return "POWER GLITCH";
+    case ESP_RST_PANIC: return "CRASH (panic)";
+    case ESP_RST_INT_WDT: return "CRASH (interrupt watchdog)";
+    case ESP_RST_TASK_WDT: return "CRASH (task watchdog)";
+    case ESP_RST_WDT: return "CRASH (watchdog)";
+    case ESP_RST_CPU_LOCKUP: return "CRASH (CPU lockup)";
+    default: return "unknown";
+  }
+}
+
 static void printBanner() {
   Serial.print("\n");
   Serial.printf("ROV firmware %s\n", FW_VERSION);
+  Serial.printf("ROV reset reason: %s\n", resetReasonName(esp_reset_reason()));
   Serial.printf("ROV mode: %s\n", DRY_RUN ? "DRY RUN (ESC pins held LOW, no pulses)" : "LIVE");
   Serial.printf("ROV ESC pins: %s=io%u %s=io%u %s=io%u | readback: io%u io%u io%u\n",
                 ESC_NAMES[0], ESC_PINS[0], ESC_NAMES[1], ESC_PINS[1], ESC_NAMES[2], ESC_PINS[2],
@@ -294,6 +323,8 @@ static void printBanner() {
   Serial.printf("ROV ESC: %s, neutral %d us, clamp %d..%d us, %lu Hz, %u-bit LEDC\n",
                 ESC_BIDIRECTIONAL ? "bidirectional" : "forward-only", NEUTRAL_US, MIN_US, MAX_US,
                 (unsigned long)PWM_FREQ_HZ, PWM_BITS);
+  Serial.printf("ROV ESC neutral trim: %s %+d, %s %+d, %s %+d us\n", ESC_NAMES[0],
+                NEUTRAL_TRIM_US[0], ESC_NAMES[1], NEUTRAL_TRIM_US[1], ESC_NAMES[2], NEUTRAL_TRIM_US[2]);
   Serial.printf("ROV watchdog %lu ms, arming: neutral for %lu ms, input ignored\n",
                 (unsigned long)WATCHDOG_MS, (unsigned long)ARM_MS);
   for (size_t i = 0; i < NUM_ESC; i++) {

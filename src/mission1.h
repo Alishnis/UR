@@ -9,7 +9,8 @@ namespace m1 {
 void connect(const char* ssid, const char* password);  // M: start joining, returns at once
 void setUrl(const char* url);                          // U
 void get();                                            // G: blocking, at most ~15 s
-void poll(uint32_t nowMs);                             // call from loop(): connection progress
+void scan();                                           // L: start a Wi-Fi scan, returns at once
+void poll(uint32_t nowMs);                             // call from loop(): connection / scan progress
 
 }  // namespace m1
 
