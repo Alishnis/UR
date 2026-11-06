@@ -2,8 +2,7 @@
 
 Used by the bridge (--mock), by pytest, and standalone on a pseudo-terminal:
 
-    python -m bridge.mock_esp32 --pty          # prints a /dev/ttys... path
-    python -m tools.fw_check --port /dev/ttysNNN --yes
+    python -m bridge.mock_esp32 --pty          # prints a /dev/ttys... path to open with any serial tool
 
 Keep the rules here identical to src/protocol.h and src/main.cpp.
 """
@@ -14,11 +13,9 @@ import argparse
 import math
 import os
 import re
-import select
 import struct
 import sys
 import time
-import tty
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -28,7 +25,7 @@ FW_VERSION = "0.1.0-mock"
 NUM_ESC = 3
 ESC_PINS = (1, 40, 42)
 READBACK_PINS = (4, 6, 5)
-NEUTRAL_TRIM_US = (0, -22, 0)  # src/config.h: added to the real pulse only, T stays untrimmed
+NEUTRAL_TRIM_US = (0, -22, -5)  # src/config.h: added to the real pulse only, T stays untrimmed
 ESC_NAMES = ("left", "right", "vert")
 
 ARM_MS = 4000
@@ -353,7 +350,10 @@ class MockEsp32:
 
 
 def run_pty(mock_kwargs: dict) -> None:
-    """Serve the mock on a pseudo-terminal so serial tools can open it."""
+    """Serve the mock on a pseudo-terminal so serial tools can open it (Linux/macOS only)."""
+    import select  # imported here: tty and os.openpty do not exist on Windows
+    import tty
+
     master, slave = os.openpty()
     tty.setraw(slave)
     os.set_blocking(master, False)
@@ -393,6 +393,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if not args.pty:
         ap.error("only --pty mode is available standalone (the bridge embeds the mock itself)")
+    if not hasattr(os, "openpty"):
+        ap.error("--pty needs a Unix pseudo-terminal (Linux/macOS); on Windows use: python -m bridge --mock")
     run_pty({"dry_run": args.dry_run, "arm_ms": args.arm_ms, "readback_wired": not args.no_readback})
     return 0
 

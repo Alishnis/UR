@@ -1,19 +1,19 @@
 // Mission 1: the ESP32 joins the Wi-Fi tower (station mode) and fetches a text string over HTTP.
-// Commands M / U / G arrive over serial (see docs/PROTOCOL.md); results leave as `N ...` lines.
-#pragma once
+// Commands M / U / G / L arrive over serial (see docs/PROTOCOL.md); results leave as `N ...` lines.
+#pragma once  // include only once per file
 
-#include <stdint.h>
+#include <stdint.h>  // uint32_t
 
-namespace m1 {
+namespace m1 {  // everything for Mission 1 lives in the "m1" namespace (m1::connect, m1::get, ...)
 
 void connect(const char* ssid, const char* password);  // M: start joining, returns at once
-void setUrl(const char* url);                          // U
+void setUrl(const char* url);                          // U: remember the URL for the next GET
 void get();                                            // G: blocking, at most ~15 s
 void scan();                                           // L: start a Wi-Fi scan, returns at once
 void poll(uint32_t nowMs);                             // call from loop(): connection / scan progress
 
 }  // namespace m1
 
-// Implemented in main.cpp.
+// Implemented in main.cpp (mission1.cpp calls them; main.cpp owns the thrusters and Serial).
 void stopAllThrusters();  // called before every blocking Wi-Fi / HTTP call
 void afterBlockingGet();  // drop stale serial input, keep the watchdog from tripping

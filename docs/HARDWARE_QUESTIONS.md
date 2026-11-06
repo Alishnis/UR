@@ -78,7 +78,9 @@ start from neutral, use the default low clamp (±150 µs).
      the motor windings because it does not see a valid signal: check that ESC's signal and
      GND wires (the re-soldered harness). Swap its signal plug with another ESC's: the twitch stays
      on the same motor → ESC / motor / its cable; it moves → the wire from io40.
-  4. Same motor: its ESC's stop is off 1500 µs. In drive_test find the range where it is
-     still (`n`, `[`, `]`) and put the middle into `NEUTRAL_TRIM_US` in `src/config.h`.
+  4. Same motor: its ESC's stop is off 1500 µs. Find the range where it is still (the standalone
+     `drive_test` sketch with its `[` `]` keys did this; it is in git history:
+     `git checkout af4f8e0 -- drive_test`) and put the middle into `NEUTRAL_TRIM_US` in `src/config.h`.
 - **Result (2026-10-21):** no restarts; the twitch follows the right (io40) ESC/motor. Still at
   1460–1495 µs → `NEUTRAL_TRIM_US` right = −22 (1478 µs).
+  2026-10-22: vert (io42) spun by itself at 1500 µs → vert = −5 (1495 µs).
