@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import threading
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -211,3 +214,11 @@ def test_parallel_calls_give_the_same_results():
     assert len(results) == 24
     for j, res in results:
         assert res == expected[j]
+
+
+def test_process_exits_cleanly_after_a_detector_was_created():
+    """pupil-apriltags' Detector.__del__ used to segfault at interpreter shutdown on Linux (exit 139)."""
+    host_dir = Path(__file__).resolve().parents[1]
+    code = "from vision import tags; tags._detector(1.0, 0.0)"
+    res = subprocess.run([sys.executable, "-c", code], cwd=host_dir, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr

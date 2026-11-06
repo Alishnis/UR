@@ -15,6 +15,8 @@ Ported from the team's earlier vision/apriltag_detector.py.
 
 from __future__ import annotations
 
+import atexit
+import gc
 import math
 import threading
 
@@ -43,6 +45,20 @@ MAX_WEAK = 10
 # pupil-apriltags Detector is NOT thread-safe: one per (decimate, sigma), each with its own lock
 _detectors: dict[tuple[float, float], tuple[Detector, threading.Lock]] = {}
 _detectors_lock = threading.Lock()
+
+
+def _release_detectors() -> None:
+    """Free the detectors while the interpreter is still whole.
+
+    pupil-apriltags' Detector.__del__ segfaults when it first runs during interpreter shutdown
+    (seen on Linux: the process dies with exit code 139 after everything finished).
+    """
+    with _detectors_lock:
+        _detectors.clear()
+    gc.collect()
+
+
+atexit.register(_release_detectors)
 _local = threading.local()  # cv2 CLAHE keeps work buffers inside the object: one per thread
 
 
