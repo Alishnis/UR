@@ -15,8 +15,6 @@ Ported from the team's earlier vision/apriltag_detector.py.
 
 from __future__ import annotations
 
-import atexit
-import gc
 import math
 import threading
 
@@ -42,23 +40,22 @@ RAW_SIGMA = 0.0
 CLAHE_SIGMA = 0.8
 MAX_WEAK = 10
 
+
+class _KeptDetector(Detector):
+    """A Detector that is never destroyed.
+
+    pupil-apriltags' Detector.__del__ segfaults on Linux (the process dies with exit code 139, also
+    at interpreter shutdown). Ours live until the process ends, so the operating system frees them.
+    """
+
+    def __del__(self) -> None:
+        pass
+
+
 # pupil-apriltags Detector is NOT thread-safe: one per (decimate, sigma), each with its own lock
-_detectors: dict[tuple[float, float], tuple[Detector, threading.Lock]] = {}
+_detectors: dict[tuple[float, float], tuple["_KeptDetector", threading.Lock]] = {}
 _detectors_lock = threading.Lock()
 
-
-def _release_detectors() -> None:
-    """Free the detectors while the interpreter is still whole.
-
-    pupil-apriltags' Detector.__del__ segfaults when it first runs during interpreter shutdown
-    (seen on Linux: the process dies with exit code 139 after everything finished).
-    """
-    with _detectors_lock:
-        _detectors.clear()
-    gc.collect()
-
-
-atexit.register(_release_detectors)
 _local = threading.local()  # cv2 CLAHE keeps work buffers inside the object: one per thread
 
 
@@ -75,11 +72,11 @@ def tags_params(params: dict) -> dict:
     }
 
 
-def _detector(decimate: float, sigma: float) -> tuple[Detector, threading.Lock]:
+def _detector(decimate: float, sigma: float) -> tuple[_KeptDetector, threading.Lock]:
     with _detectors_lock:
         entry = _detectors.get((decimate, sigma))
         if entry is None:
-            det = Detector(
+            det = _KeptDetector(
                 families=TAG_FAMILY,
                 nthreads=DETECTOR_THREADS,
                 quad_decimate=decimate,

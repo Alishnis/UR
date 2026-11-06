@@ -216,9 +216,18 @@ def test_parallel_calls_give_the_same_results():
         assert res == expected[j]
 
 
-def test_process_exits_cleanly_after_a_detector_was_created():
-    """pupil-apriltags' Detector.__del__ used to segfault at interpreter shutdown on Linux (exit 139)."""
+def test_process_exits_cleanly_after_a_detector_was_used():
+    """pupil-apriltags' Detector.__del__ segfaults on Linux (exit code 139); ours is never destroyed."""
     host_dir = Path(__file__).resolve().parents[1]
-    code = "from vision import tags; tags._detector(1.0, 0.0)"
+    code = (
+        "import threading, numpy as np\n"
+        "from vision import tags\n"
+        "det, lock = tags._detector(1.0, 0.0)\n"
+        "img = np.zeros((120, 160), np.uint8)\n"
+        "det.detect(img)\n"
+        "t = threading.Thread(target=lambda: det.detect(img)); t.start(); t.join()\n"
+        "tags._detectors.clear()\n"
+        "del det\n"
+    )
     res = subprocess.run([sys.executable, "-c", code], cwd=host_dir, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
