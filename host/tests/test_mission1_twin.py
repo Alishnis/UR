@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import shutil
+import sys
 import subprocess
 from pathlib import Path
 
@@ -20,7 +21,7 @@ def dump_bin(tmp_path_factory) -> Path:
     cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
     if not cxx:
         pytest.skip("no C++ compiler")
-    out = tmp_path_factory.mktemp("m1twin") / "lines_dump"
+    out = tmp_path_factory.mktemp("m1twin") / ("lines_dump.exe" if sys.platform == "win32" else "lines_dump")
     subprocess.run([cxx, "-std=c++17", "-O1", "-o", str(out), str(DUMP_SRC)], check=True)
     return out
 

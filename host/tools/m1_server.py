@@ -1,15 +1,18 @@
 """Tiny HTTP server that plays the competition tower, for testing Mission 1 on the desk.
 
     cd host
-    .venv/bin/python -m tools.m1_server                 # serves on 0.0.0.0:8080
-    .venv/bin/python -m tools.m1_server --text "hello"  # custom message
+    python -m tools.m1_server                 # serves on 0.0.0.0:8080 (run from host/)
+    python -m tools.m1_server --text "hello"  # custom message
 
 The laptop and the ESP32 must be on the SAME 2.4 GHz Wi-Fi network (phone hotspot works).
 Use one of the printed URLs in the GUI (or `U <url>` over serial). Every request is logged
 with the client's IP and User-Agent: the ESP32's HTTPClient says "ESP32HTTPClient", a browser
 does not. That tells you who really fetched the text (a laptop or phone fetching scores 0).
 
-macOS asks once whether Python may accept incoming connections: allow it.
+macOS / Windows ask once whether Python may accept incoming connections: allow it.
+
+Campus or public Wi-Fi often blocks traffic between two devices (client isolation): the ESP32's GET
+then times out after 5 s although everything is fine. Use a phone hotspot (2.4 GHz) for this test.
 """
 
 from __future__ import annotations

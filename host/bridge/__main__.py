@@ -1,4 +1,4 @@
-"""Run the bridge:  python -m bridge [--mock] [--port /dev/cu.usbmodemXXXX]"""
+"""Run the bridge:  python -m bridge [--mock] [--port COM5 | /dev/cu.usbmodemXXXX | /dev/ttyACM0]"""
 
 from __future__ import annotations
 
@@ -9,6 +9,19 @@ import signal
 import sys
 
 from bridge.server import Bridge
+
+
+def install_stop_handlers(loop: asyncio.AbstractEventLoop, stop: asyncio.Event) -> bool:
+    """Make Ctrl+C / SIGTERM set `stop`. Returns False where the loop cannot do it (Windows).
+
+    There asyncio.run() turns Ctrl+C into a cancelled main task and amain() cleans up in `finally`.
+    """
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+    except NotImplementedError:  # Windows event loops have no add_signal_handler
+        return False
+    return True
 
 
 async def amain(args: argparse.Namespace) -> None:
@@ -32,12 +45,12 @@ async def amain(args: argparse.Namespace) -> None:
     print("Ctrl+C to stop (motors are set to neutral first).")
 
     stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
-    await stop.wait()
-    print("\nStopping...")
-    await bridge.stop()
+    install_stop_handlers(asyncio.get_running_loop(), stop)
+    try:
+        await stop.wait()
+    finally:  # also runs when Ctrl+C cancels this task (Windows): motors must be set to neutral
+        print("\nStopping...")
+        await bridge.stop()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -60,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         asyncio.run(amain(args))
+    except KeyboardInterrupt:  # Windows: Ctrl+C after the clean-up in amain()
+        pass
     except OSError as e:
         print(f"Cannot start: {e}\nIs another bridge already running on these ports?")
         return 1

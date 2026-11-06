@@ -1,0 +1,5 @@
+# Same line endings on every system (the sources are checked out with LF on Windows too).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary

@@ -60,6 +60,20 @@ def validate_browser_line(msg: object) -> str | None:
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     """Static files, never cached (we edit config.js at the pool and reload)."""
 
+    # Fixed types: on Windows Python reads MIME types from the registry, where .js is often
+    # "text/plain", and Chrome refuses ES modules served like that.
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        ".js": "text/javascript",
+        ".mjs": "text/javascript",
+        ".css": "text/css",
+        ".html": "text/html",
+        ".json": "application/json",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".ico": "image/x-icon",
+    }
+
     def end_headers(self) -> None:
         self.send_header("Cache-Control", "no-store")
         super().end_headers()

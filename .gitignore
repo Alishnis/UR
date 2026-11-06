@@ -7,3 +7,7 @@ host/.venv/
 __pycache__/
 .pytest_cache/
 .DS_Store
+node_modules/
+*.log
+.env
+.idea/

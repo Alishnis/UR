@@ -234,6 +234,7 @@ def test_http_serves_gui_without_caching_and_no_traversal():
 
 # ---- the real serial path, through a pseudo-terminal --------------------------
 
+@pytest.mark.skipif(not hasattr(os, "openpty"), reason="pseudo-terminals exist on Linux/macOS only")
 def test_real_serial_link_through_a_pty(tmp_path):
     log = tmp_path / "mock.log"
     proc = subprocess.Popen(

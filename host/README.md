@@ -8,29 +8,51 @@ USB camera ─► Browser GUI ──WebSocket :8766──► vision service (bri
 
 ## Install (once)
 
+Needs **Python 3.12** (3.10 to 3.12 work) and Chrome. Commands below are for the `host` folder.
+
+**macOS / Linux**
+
 ```bash
 cd host
 python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
+
+**Windows (PowerShell)**
+
+```powershell
+cd host
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+If PowerShell refuses to run the activation script, run once:
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. In `cmd.exe` use `.venv\Scripts\activate.bat`.
+
+Every new terminal needs the `activate` line again (the prompt then starts with `(.venv)`).
+All commands below assume the virtual environment is active.
 
 ## Run
 
 **Without hardware** (fake ESP32, good for learning the GUI):
 
 ```bash
-cd host && .venv/bin/python -m bridge --mock
+cd host
+python -m bridge --mock
 ```
 
 **With the ESP32** (close the PlatformIO monitor first, only one program can hold the port):
 
 ```bash
-cd host && .venv/bin/python -m bridge
+cd host
+python -m bridge
 ```
 
-Then open <http://localhost:8000/> in Chrome. The serial port is found automatically
-(`--port /dev/cu.usbmodemXXXX` to force one). Ctrl+C stops the bridge and sets the
-motors to neutral first.
+Then open <http://localhost:8000/> in Chrome. The serial port is found automatically; to force
+one use `--port COM5` (Windows), `--port /dev/cu.usbmodemXXXX` (macOS) or `--port /dev/ttyACM0`
+(Linux). Ctrl+C stops the bridge and sets the motors to neutral first.
 
 Useful options: `--mock-dry-run` (mock behaves like DRY_RUN firmware), `--mock-arm-ms 0`
 (skip the 4 s arming), `-v` (log connects, serial status), `--no-vision` / `--vision-port N`
@@ -115,16 +137,21 @@ hotspot works; 5 GHz-only networks cannot be joined):
 
 1. Start the tower stand-in on the laptop, it prints the URL to use and logs every request:
    ```bash
-   cd host && .venv/bin/python -m tools.m1_server
+   cd host && python -m tools.m1_server
    ```
-   macOS asks once whether Python may accept incoming connections: allow it.
+   macOS / Windows ask once whether Python may accept incoming connections: allow it
+   (on Windows, for private networks).
 2. Start the bridge and open the GUI. In the Mission 1 panel enter the hotspot's SSID and
    password and the printed URL (e.g. `http://172.20.10.2:8080/`). Connect, then GET.
 3. The server log must show `UA='ESP32HTTPClient' -> ESP32`. That proves the ESP32 fetched it.
 
-Without the GUI: `.venv/bin/python -m tools.m1_check --ssid UR_Field --password 12345678 --url http://...`
-(close the bridge first). With `--mock` the bridge simulates a tower that knows `UR_Field` /
-`12345678` and serves the manual's sample text, so you can practise the panel anywhere.
+If the GET fails after about 5 s with `http error: connection refused` although the IP is right,
+the Wi-Fi network probably blocks traffic between two devices (client isolation, common on campus
+and public Wi-Fi). Use a phone hotspot for the desk test; the real tower is a separate machine and
+does not have this problem. An instant error means the address answers but nothing listens on that port.
+
+With `--mock` the bridge simulates a tower that knows `UR_Field` / `12345678` and serves the
+manual's sample text, so you can practise the panel anywhere.
 
 **Panel tools:**
 
@@ -331,9 +358,9 @@ open the same address.
 ## Tests
 
 ```bash
-cd host && .venv/bin/python -m pytest -q          # bridge, mock ESP32, protocol twin, vision
+cd host && python -m pytest -q                     # bridge, mock ESP32, protocol twin, vision
 cd host/webgui && node --test                      # mixer, controller, keys, calibration, Mission 1, camera missions
-sh tests/firmware/run.sh                           # firmware parser + Mission 1 helpers (project root)
+python tests/firmware/run.py                       # firmware parser + Mission 1 helpers (project root, needs g++ or clang++)
 ```
 
 Vision tests use synthetic frames only (no camera): `tests/vision_synth.py` draws tags 17 / 245 /
@@ -356,14 +383,13 @@ Vision tests use synthetic frames only (no camera): `tests/vision_synth.py` draw
 | `webgui/tests/sim.test.js`, `testscene.test.js` | simulator motion, camera, course in view |
 | `webgui/tests/overlay.test.js`, `vision_link.test.js` | overlay geometry; one frame in flight, timeouts, connection loss, camera error texts |
 
-Hardware acceptance (ESC power unplugged, or DRY_RUN firmware): 
-`.venv/bin/python -m tools.fw_check`. First spin test without the GUI:
-`.venv/bin/python -m tools.spin_test --output 0`.
+Hardware check without spinning anything (ESC power unplugged, or DRY_RUN firmware): start the
+bridge, open the GUI, press **Run R** in Pin self-check: every output must read `ok`.
 
 ## Pre-dive checklist
 
 - [ ] Firmware is LIVE (`Firmware: LIVE`), clamp ±150 µs unless deliberately changed
-- [ ] `fw_check` passes with ESC power unplugged
+- [ ] Pin self-check (Run R) reads `ok` on all three outputs with ESC power unplugged
 - [ ] Each pin spins exactly one motor (PIN TEST), names and directions fixed (THRUSTER TEST)
 - [ ] Calibration saved (and copied into `config.js` as the new defaults)
 - [ ] Common GND between ESP32 and ESC signal wires; ESP32 not powered from USB and the buck at the same time
