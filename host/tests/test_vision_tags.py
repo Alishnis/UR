@@ -121,8 +121,25 @@ def test_empty_and_odd_frames():
 @pytest.mark.parametrize("decimate", [1, 1.5, 4])
 def test_tiny_frames_do_not_crash_the_detector(decimate):
     # pupil-apriltags segfaults on images a few px high: that would take the whole bridge down
-    for shape in [(1, 1), (1, 640), (2, 700), (5, 300), (8, 1280), (31, 900), (300, 2), (40, 40)]:
-        assert detect_tags(np.full(shape + (3,), 90, np.uint8), {"decimate": decimate})["tags"] == []
+    shapes = [(1, 1), (1, 640), (2, 700), (5, 300), (8, 1280), (31, 900), (300, 2), (40, 40), (47, 47), (64, 64),
+              (96, 96), (127, 300), (45, 640)]
+    for shape in shapes:
+        for fill in (0, 90, 255):  # the library crashed depending on what was in memory: try several images
+            assert detect_tags(np.full(shape + (3,), fill, np.uint8), {"decimate": decimate})["tags"] == []
+
+
+def test_the_size_limit_counts_the_image_after_decimation(monkeypatch):
+    """A 64 px frame is fine at decimate 1 or 2 but too small for the detector at decimate 4 (16 px)."""
+    from vision import tags
+
+    calls = []
+    monkeypatch.setattr(tags, "_run", lambda gray, decimate, sigma: calls.append(gray.shape) or [])
+    frame = np.full((64, 64, 3), 90, np.uint8)
+    detect_tags(frame, {"decimate": 2, "clahe": False})
+    assert calls, "64 px at decimate 2 is 32 px: it must run"
+    calls.clear()
+    detect_tags(frame, {"decimate": 4, "clahe": False})
+    assert not calls, "64 px at decimate 4 is 16 px: the C library must never see it"
 
 
 def test_params_are_sanitised():

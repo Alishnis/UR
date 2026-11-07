@@ -30,8 +30,9 @@ DECIMATE_STEPS = (1.0, 1.5, 2.0, 3.0, 4.0)
 DETECTOR_THREADS = 2  # the bridge runs 2 vision workers: more threads per detector only oversubscribe
 # the wrong (mirror) pose solution must fit the corners this many times worse for the yaw sign to be trusted
 YAW_AMBIGUITY_RATIO = 2.0
-# pupil-apriltags 1.0.4 SEGFAULTS (kills the bridge) on images only a few px high (< 3 px, < 9 px with
-# decimate 4); a tag needs ~20 px anyway
+# pupil-apriltags 1.0.4 SEGFAULTS (kills the bridge) on small images, sometimes only now and then (seen on
+# Linux with a 40 x 40 frame at decimate 4). It shrinks the image by `decimate` first, so the limit applies to
+# the SHRUNK size; a tag needs ~20 px anyway
 MIN_IMAGE_PX = 32
 
 # quad_sigma (Gaussian pre-blur before finding edges) per pass: none for the raw pass (small tags),
@@ -147,7 +148,7 @@ def detect_tags(bgr: np.ndarray, params: dict) -> dict:
     the same physical corner of the tag."""
     p = tags_params(params)
     h, w = bgr.shape[:2]
-    if min(h, w) < MIN_IMAGE_PX:
+    if min(h, w) / p["decimate"] < MIN_IMAGE_PX:  # size after the detector's own decimation
         return {"tags": [], "weak": []}
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY) if bgr.ndim == 3 else np.ascontiguousarray(bgr)
 
