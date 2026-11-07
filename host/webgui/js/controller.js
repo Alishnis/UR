@@ -1,8 +1,8 @@
-// Controller: ARM state, held keys, tests, ramp and the D / S line for each tick.
+// Controller: ARM state, held keys, throttle levels, tests, ramp and the D / S line for each tick.
 // No DOM, no timers: call step(dtSeconds) from the 20 Hz loop. Unit-tested.
 
 import { CONFIG } from './config.js';
-import { axesFromKeys, KEY_MAG_DOWN, KEY_MAG_UP, KEY_ZERO } from './controls.js';
+import { axesFromKeys, DRIVE_KEYS, KEY_MAG_DOWN, KEY_MAG_UP, KEY_ZERO } from './controls.js';
 import {
   clamp, encodeD, isPermutation, mix, pinTestSlots, rampToward, thrusterTestSlots,
   toSlots, toTargets,
@@ -18,6 +18,11 @@ export class Controller {
     this.maxThrottle = opts.maxThrottle ?? CONFIG.maxThrottle.default;
     this.maxLimit = opts.maxLimit ?? CONFIG.maxThrottle.limit;
     this.magnitude = this.magCfg.default;
+    // 'hold': an axis is full only while its key is pressed. 'latch' (Throttle mode): a held key moves
+    // the level of its axis gradually (lever) and the level stays after the key is released.
+    this.driveMode = opts.driveMode === 'latch' ? 'latch' : 'hold';
+    this.leverRate = opts.leverRatePerSec ?? CONFIG.driveMode.ratePerSec;
+    this.lever = { surge: 0, yaw: 0, heave: 0 };
     this.armed = false;
     this.keys = new Set();
     this.test = null; // {kind:'thruster', name, sign} | {kind:'pin', slot, sign}
@@ -36,6 +41,24 @@ export class Controller {
     this.maxThrottle = clamp(Number(v) || 0, 0, this.maxLimit);
   }
 
+  // 'hold' | 'latch'. Refused while armed: the way the keys act must not change under running motors.
+  setDriveMode(mode) {
+    if (this.armed || (mode !== 'hold' && mode !== 'latch')) return false;
+    this.driveMode = mode;
+    this.zeroLever();
+    return true;
+  }
+
+  zeroLever() {
+    this.lever = { surge: 0, yaw: 0, heave: 0 };
+  }
+
+  // The surge / yaw / heave the vehicle is being driven with (-1..1): the lever levels in Throttle mode,
+  // the held keys in Hold mode. The test-scene simulator moves with this.
+  axes() {
+    return this.driveMode === 'latch' ? { ...this.lever } : axesFromKeys(this.keys);
+  }
+
   // -- ARM / DISARM / E-STOP ----------------------------------------------
   arm() {
     if (this.armed) return { ok: true };
@@ -44,6 +67,7 @@ export class Controller {
     }
     this.current = [0, 0, 0];
     this.test = null;
+    this.zeroLever(); // always start from stop
     this.armed = true;
     return { ok: true };
   }
@@ -52,6 +76,7 @@ export class Controller {
     this.armed = false;
     this.test = null;
     this.current = [0, 0, 0];
+    this.zeroLever();
   }
 
   estop() {
@@ -68,9 +93,11 @@ export class Controller {
     this.keys.delete(code);
   }
 
+  // Focus lost, tab hidden or a text field entered: nobody is watching the keys, so the levels go to stop too.
   clearKeys() {
     this.keys.clear();
     this.stopTest();
+    this.zeroLever();
   }
 
   // -- tests (only while armed; the caller stops them on release) --------
@@ -105,6 +132,7 @@ export class Controller {
 
     if (!this.armed) {
       this.current = [0, 0, 0];
+      this.zeroLever();
       return { line: 'S', slots: [0, 0, 0], armed: false };
     }
 
@@ -113,6 +141,7 @@ export class Controller {
     if (this.keys.has(KEY_ZERO)) {
       target = [0, 0, 0];
       immediateZero = true; // Space = brake: no ramp
+      this.zeroLever();     // ... and the Throttle levels go to stop as well
     } else if (this.test) {
       this.testAgeMs += dt * 1000;
       if (this.testAgeMs > this.testMaxMs) this.test = null; // stuck button protection
@@ -132,8 +161,8 @@ export class Controller {
           });
         }
       } else {
-        const axes = axesFromKeys(this.keys);
-        const logical = mix(axes, this.magnitude);
+        if (this.driveMode === 'latch') this.moveLever(dt);
+        const logical = mix(this.axes(), this.magnitude);
         target = toSlots(toTargets(logical, this.cal.thrusters, this.maxThrottle), this.cal.outputSlot);
       }
     }
@@ -141,5 +170,13 @@ export class Controller {
     const maxStep = this.rampPerSec * dt;
     this.current = this.current.map((c, i) => (immediateZero ? 0 : rampToward(c, target[i], maxStep)));
     return { line: encodeD(this.current), slots: [...this.current], armed: true };
+  }
+
+  // Throttle mode: each held drive key moves the level of its axis by leverRate per second; opposite
+  // keys cancel; the level stays within -1..1 and stays where it is when the key is released.
+  moveLever(dt) {
+    for (const [code, { axis, dir }] of Object.entries(DRIVE_KEYS)) {
+      if (this.keys.has(code)) this.lever[axis] = clamp(this.lever[axis] + dir * this.leverRate * dt, -1, 1);
+    }
   }
 }

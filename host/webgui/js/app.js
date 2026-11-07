@@ -7,7 +7,7 @@ import {
 import { CONFIG } from './config.js';
 import { confirmClick } from './confirm.js';
 import { Controller } from './controller.js';
-import { axesFromKeys, bindKeyboard, isTypingTarget } from './controls.js';
+import { bindKeyboard, isTypingTarget } from './controls.js';
 import { BridgeLink } from './link.js';
 import { fromSlots, isPermutation, NAMES } from './mixer.js';
 import {
@@ -31,8 +31,19 @@ function storage() {
 
 const REBOOT_WINDOW_MS = 30000;
 
+const DRIVE_MODE_KEY = 'rov.driveMode';
+
+function loadDriveMode() {
+  try {
+    const v = storage()?.getItem(DRIVE_MODE_KEY);
+    return v === 'hold' || v === 'latch' ? v : CONFIG.driveMode.default;
+  } catch {
+    return CONFIG.driveMode.default;
+  }
+}
+
 let cal = loadCalibration(storage());
-const controller = new Controller(cal);
+const controller = new Controller(cal, { driveMode: loadDriveMode() });
 
 const state = {
   bridgeKind: null,        // 'mock' | 'serial'
@@ -322,6 +333,40 @@ maxSlider.addEventListener('input', () => {
   updateMaxUi();
 });
 updateMaxUi();
+
+// ---------------------------------------------------------------------------
+// Drive mode: Throttle (levels stay) or Hold (full only while a key is pressed)
+// ---------------------------------------------------------------------------
+
+const DRIVE_MODE_HINT = {
+  latch: 'Throttle: hold W/S, A/D or R/F to change that level gradually, a short tap changes it a little. '
+    + 'The level STAYS when you let go. Space = all zero, Esc = E-STOP.',
+  hold: 'Hold: an axis is at full MAX only while its key is pressed, and stops when you release it.',
+};
+
+const driveModeSel = $('drive-mode');
+driveModeSel.value = controller.driveMode;
+driveModeSel.addEventListener('change', () => {
+  if (controller.setDriveMode(driveModeSel.value)) {
+    try {
+      storage()?.setItem(DRIVE_MODE_KEY, controller.driveMode);
+    } catch { /* not remembered */ }
+    log(`drive mode: ${controller.driveMode === 'latch' ? 'Throttle (levels stay)' : 'Hold (only while pressed)'}`, 'B');
+  } else {
+    driveModeSel.value = controller.driveMode; // refused (armed)
+  }
+});
+
+const levelText = (v) => (v >= 0 ? '+' : '-') + Math.abs(v).toFixed(2);
+
+function renderDriveMode() {
+  driveModeSel.disabled = controller.armed;
+  $('drive-mode-hint').textContent = DRIVE_MODE_HINT[controller.driveMode];
+  const lev = $('lever-out');
+  lev.hidden = controller.driveMode !== 'latch';
+  const l = controller.lever;
+  lev.textContent = `level  surge ${levelText(l.surge)} | yaw ${levelText(l.yaw)} | heave ${levelText(l.heave)}`;
+}
 
 // ---------------------------------------------------------------------------
 // Thruster bars
@@ -986,6 +1031,7 @@ function render(now) {
   $('mag-out').textContent = `x${controller.magnitude.toFixed(2)}`;
   renderStatus(now);
   renderNotice(now);
+  renderDriveMode();
   renderBars(now);
   renderTests();
   renderCalibrationLock();
@@ -1036,7 +1082,7 @@ buildMission1();
 const vision = initVision({
   log, notify, storage: storage(), controller,
   isArmed: () => controller.armed,
-  getAxes: () => axesFromKeys(controller.keys),
+  getAxes: () => controller.axes(),
 });
 $('btn-log-clear').addEventListener('click', (e) => {
   logEl.replaceChildren();

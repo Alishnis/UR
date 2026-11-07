@@ -20,6 +20,12 @@ export const CONFIG = {
   // J / K "magnitude" multiplier, applied to surge/yaw/heave before the MAX slider.
   magnitude: { default: 1.0, min: 0.1, max: 1.0, ratePerSec: 0.5 },
 
+  // Drive mode: 'latch' = Throttle mode (a key moves the level of its axis gradually and the level
+  // STAYS when the key is released; Space or Esc zero it), 'hold' = the level is full only while a key
+  // is pressed. ratePerSec = how fast a held key moves the level, in axis units per second
+  // (0.5: two seconds from 0 to full; a short tap moves it a few percent).
+  driveMode: { default: 'latch', ratePerSec: 0.5 },
+
   // Output slew limit, fraction of full range per second. Never jump to high throttle.
   rampPerSec: 1.5,
 

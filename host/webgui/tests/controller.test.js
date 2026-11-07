@@ -312,3 +312,170 @@ test('every line the controller emits matches the protocol grammar', () => {
     for (const x of line.split(' ').slice(1)) assert.ok(Math.abs(Number(x)) <= 0.3 + 1e-9);
   }
 });
+
+// ---- Throttle mode (driveMode 'latch'): keys move a level gradually and it stays ----------------
+
+const latch = (o = {}) => make(cal(), { driveMode: 'latch', leverRatePerSec: 0.5, ...o });
+
+test('latch: a held key raises the level gradually and it stays after the key is released', () => {
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyW');
+  run(c, 1);                       // 1 s at 0.5 per second
+  near(c.lever.surge, 0.5, 1e-6);
+  c.keyUp('KeyW');
+  const r = run(c, 1);             // nothing pressed: the level must not decay
+  near(c.lever.surge, 0.5, 1e-6);
+  near(r.slots[0], 0.5 * 0.3, 1e-6); // 0.5 of the MAX throttle (0.3), still driving
+  near(r.slots[1], 0.5 * 0.3, 1e-6);
+});
+
+test('latch: a short tap changes the level only a little', () => {
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyW');
+  c.step(DT);
+  c.step(DT);                      // 0.1 s
+  c.keyUp('KeyW');
+  near(c.lever.surge, 0.05, 1e-6);
+  assert.equal(run(c, 1).line, 'D 0.015 0.015 0.000');
+});
+
+test('latch: the opposite key lowers the level, through zero into reverse', () => {
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyW');
+  run(c, 1);
+  c.keyUp('KeyW');
+  c.keyDown('KeyS');
+  run(c, 1.5);                     // 0.5 - 0.75
+  near(c.lever.surge, -0.25, 1e-6);
+  assert.ok(run(c, 0.5).slots[0] < 0);
+});
+
+test('latch: the level never leaves -1..1', () => {
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyR');
+  run(c, 5);
+  near(c.lever.heave, 1);
+  c.keyUp('KeyR');
+  c.keyDown('KeyF');
+  run(c, 10);
+  near(c.lever.heave, -1);
+});
+
+test('latch: opposite keys together cancel, axes are independent', () => {
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyW');
+  c.keyDown('KeyS');
+  run(c, 1);
+  near(c.lever.surge, 0);
+  c.keyUp('KeyS');
+  c.keyDown('KeyD');
+  run(c, 1);
+  near(c.lever.surge, 0.5, 1e-6);
+  near(c.lever.yaw, 0.5, 1e-6);
+  near(c.lever.heave, 0);
+});
+
+test('latch: Space zeroes the levels and the output at once', () => {
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyW');
+  run(c, 2);
+  c.keyUp('KeyW');
+  c.keyDown('Space');
+  const r = c.step(DT);
+  assert.equal(r.line, 'D 0.000 0.000 0.000');
+  c.keyUp('Space');
+  near(c.lever.surge, 0);
+  assert.equal(run(c, 1).line, 'D 0.000 0.000 0.000');   // and it stays at zero
+});
+
+test('latch: disarm, E-STOP, re-arm and lost focus all reset the levels', () => {
+  for (const reset of [(c) => c.disarm(), (c) => c.estop(), (c) => c.clearKeys()]) {
+    const c = latch();
+    c.arm();
+    c.keyDown('KeyW');
+    run(c, 1);
+    c.keyUp('KeyW');
+    assert.ok(c.lever.surge > 0);
+    reset(c);
+    near(c.lever.surge, 0);
+  }
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyW');
+  run(c, 1);
+  c.keyUp('KeyW');
+  c.disarm();
+  c.arm();
+  near(c.lever.surge, 0);
+  assert.equal(c.step(DT).line, 'D 0.000 0.000 0.000');
+});
+
+test('latch: while disarmed the keys change nothing', () => {
+  const c = latch();
+  c.keyDown('KeyW');
+  run(c, 1);
+  near(c.lever.surge, 0);
+  assert.equal(c.step(DT).line, 'S');
+});
+
+test('latch: the output still ramps (no jump) and a running thruster test freezes the levels', () => {
+  const c = latch({ leverRatePerSec: 4 });   // fast lever so the ramp is the limit
+  c.arm();
+  c.keyDown('KeyW');
+  const first = c.step(DT);
+  assert.ok(first.slots[0] <= 1.5 * DT + 1e-9);
+  c.keyUp('KeyW');
+  c.startThrusterTest('left', +1);
+  const before = c.lever.surge;
+  c.keyDown('KeyW');
+  run(c, 0.5);
+  near(c.lever.surge, before);               // a test owns the output: the lever does not move
+});
+
+test('latch: MAX throttle still scales the result and magnitude still applies', () => {
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyW');
+  run(c, 2);                                  // lever 1.0
+  c.keyUp('KeyW');
+  c.setMaxThrottle(0.2);
+  assert.equal(run(c, 2).line, 'D 0.200 0.200 0.000');
+  c.keyDown('KeyJ');
+  run(c, 1);                                  // magnitude 1.0 -> 0.5
+  c.keyUp('KeyJ');
+  assert.equal(run(c, 2).line, 'D 0.100 0.100 0.000');
+});
+
+test('setDriveMode: only latch or hold, refused while armed, clears the levels, axes() follows the mode', () => {
+  const c = latch();
+  assert.equal(c.setDriveMode('turbo'), false);
+  assert.equal(c.driveMode, 'latch');
+  c.arm();
+  c.keyDown('KeyW');
+  run(c, 1);
+  c.keyUp('KeyW');
+  near(c.axes().surge, 0.5, 1e-6);
+  assert.equal(c.axes().yaw, 0);
+  assert.equal(c.setDriveMode('hold'), false);   // armed
+  c.disarm();
+  assert.equal(c.setDriveMode('hold'), true);
+  near(c.lever.surge, 0);
+  c.keyDown('KeyD');
+  assert.deepEqual(c.axes(), { surge: 0, yaw: 1, heave: 0 });   // hold: straight from the keys
+});
+
+test('hold mode is the default and is unchanged: full on press, stop on release', () => {
+  const c = make();
+  assert.equal(c.driveMode, 'hold');
+  c.arm();
+  c.keyDown('KeyW');
+  assert.equal(run(c, 1).line, 'D 0.300 0.300 0.000');
+  c.keyUp('KeyW');
+  assert.equal(run(c, 1).line, 'D 0.000 0.000 0.000');
+});

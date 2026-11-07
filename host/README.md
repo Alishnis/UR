@@ -66,9 +66,23 @@ Useful options: `--mock-dry-run` (mock behaves like DRY_RUN firmware), `--mock-a
 | `A` / `D` | yaw left / right |
 | `R` / `F` | up / down |
 | `J` / `K` | lower / raise magnitude (smooth) |
-| `Space` (hold) | all zero, instantly |
+| `Space` (hold) | all zero, instantly (also clears the Throttle levels) |
 | `Esc` | **E-STOP** (disarm). Works even while typing |
 | `H` | Mission 4 hold timer start / stop (only on the camera tab `4 Hook`) |
+
+### Drive mode (Drive panel)
+
+- **Throttle: levels stay** (default). `W/S`, `A/D` and `R/F` each move a *level* for their axis
+  gradually while the key is held (2 s from 0 to full, a short tap changes it a few percent, `config.js`
+  `driveMode.ratePerSec`). **The level stays when you release the key**, like a throttle lever: raise it
+  with `W`, lower it with `S` (through zero into reverse). The line under the selector shows the three
+  levels, and the thruster bars show the real pulses (full level = MAX throttle, e.g. 1500 to 1575 us at 0.5).
+  `Space` or `Esc` zero everything at once. The levels are also reset by DISARM, losing the window focus,
+  hiding the tab, and entering a text field, so the robot never keeps driving unattended.
+- **Hold: only while pressed.** The old behaviour: an axis is at full MAX only while its key is held.
+
+The choice is remembered in this browser and can only be changed while DISARMED. The MAX slider
+and the firmware clamp (+-150 us) limit both modes in the same way.
 
 Keys are physical keys, so they work on the Russian layout too. While a text field has
 focus (e.g. a number in Calibration) driving keys are paused and the status bar says so;

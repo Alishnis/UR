@@ -139,12 +139,16 @@ Build without uploading: `pio run`. Firmware constants (pins, limits, trim) are 
 
 | Key | Action |
 |---|---|
-| `W` / `S` | forward / back |
-| `A` / `D` | yaw left / right |
-| `R` / `F` | up / down |
+| `W` / `S` | forward / back: raises / lowers the level gradually, **the level stays** after release |
+| `A` / `D` | yaw left / right (same) |
+| `R` / `F` | up / down (same) |
 | `J` / `K` | lower / raise magnitude |
-| `Space` (hold) | all zero |
+| `Space` | all zero at once |
 | `Esc` | **E-STOP** (works even while typing) |
+
+This is the default **Throttle mode** (Drive panel > Drive mode): like a throttle lever, a key moves the
+level and it stays. Choose **Hold** there for the old behaviour (full only while the key is pressed).
+Levels are reset by Space, Esc, DISARM, losing window focus and hiding the tab.
 
 Useful bridge options: `--mock` (fake ESP32), `-v` (verbose), `--no-vision` (no camera service),
 `--http-port`, `--ws-port`, `--vision-port` (if a port is taken).

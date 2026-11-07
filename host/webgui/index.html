@@ -229,14 +229,24 @@
         <output id="mag-out"></output>
       </div>
 
+      <div class="slider">
+        <span>Drive mode</span>
+        <select id="drive-mode" aria-label="Drive mode">
+          <option value="latch">Throttle: levels stay</option>
+          <option value="hold">Hold: only while pressed</option>
+        </select>
+      </div>
+      <p class="hint" id="drive-mode-hint"></p>
+      <p class="hint lever" id="lever-out"></p>
+
       <details class="keyhelp">
         <summary>Keys</summary>
         <table>
-          <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>forward / back</td></tr>
-          <tr><td><kbd>A</kbd> <kbd>D</kbd></td><td>yaw left / right</td></tr>
-          <tr><td><kbd>R</kbd> <kbd>F</kbd></td><td>up / down</td></tr>
+          <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>forward / back (Throttle mode: raise / lower the level)</td></tr>
+          <tr><td><kbd>A</kbd> <kbd>D</kbd></td><td>yaw left / right (same)</td></tr>
+          <tr><td><kbd>R</kbd> <kbd>F</kbd></td><td>up / down (same)</td></tr>
           <tr><td><kbd>J</kbd> <kbd>K</kbd></td><td>lower / raise magnitude</td></tr>
-          <tr><td><kbd>Space</kbd></td><td>hold: all zero</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>all zero at once (also clears the Throttle levels)</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>E-STOP (disarm), works while typing</td></tr>
           <tr><td><kbd>H</kbd></td><td>hold timer start / stop (camera tab 4 Hook)</td></tr>
         </table>
