@@ -146,6 +146,11 @@ Build without uploading: `pio run`. Firmware constants (pins, limits, trim) are 
 | `Space` | all zero at once |
 | `Esc` | **E-STOP** (works even while typing) |
 
+The Drive panel also has an **on-screen pad with the same six directions** (Forward, Back, Left,
+Right, Up, Down; Left / Right turn the ROV). Press and hold a button like its key; it shows the level
+as a gauge. Per-thruster bars, thruster and pin tests, self-check and calibration are in the collapsed
+**Diagnostics** section.
+
 This is the default **Throttle mode** (Drive panel > Drive mode): like a throttle lever, a key moves the
 level and it stays. Choose **Hold** there for the old behaviour (full only while the key is pressed).
 Levels are reset by Space, Esc, DISARM, losing window focus and hiding the tab.

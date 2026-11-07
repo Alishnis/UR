@@ -70,13 +70,23 @@ Useful options: `--mock-dry-run` (mock behaves like DRY_RUN firmware), `--mock-a
 | `Esc` | **E-STOP** (disarm). Works even while typing |
 | `H` | Mission 4 hold timer start / stop (only on the camera tab `4 Hook`) |
 
+### Six directions: keys and on-screen pad
+
+The Drive panel has a pad with exactly six controls: **Forward, Back, Left, Right, Up, Down**
+(keys `W S A D R F`). A pad button works like its key: press and hold it. Each button fills like a
+gauge with the level of that direction. **Left / Right turn the ROV** (it has no sideways thruster).
+Individual thrusters are not controlled directly: the mixer turns the six directions into the three
+thruster commands. The per-thruster bars, Thruster test, Pin test, Pin self-check and Calibration
+are in the collapsed **Diagnostics** section below the Drive panel. **Zero all** (or `Space`) clears
+every level.
+
 ### Drive mode (Drive panel)
 
 - **Throttle: levels stay** (default). `W/S`, `A/D` and `R/F` each move a *level* for their axis
   gradually while the key is held (2 s from 0 to full, a short tap changes it a few percent, `config.js`
   `driveMode.ratePerSec`). **The level stays when you release the key**, like a throttle lever: raise it
-  with `W`, lower it with `S` (through zero into reverse). The line under the selector shows the three
-  levels, and the thruster bars show the real pulses (full level = MAX throttle, e.g. 1500 to 1575 us at 0.5).
+  with `W`, lower it with `S` (through zero into reverse). The pad shows the levels, and the thruster bars
+  (Diagnostics) show the real pulses (full level = MAX throttle, e.g. 1500 to 1575 us at 0.5).
   `Space` or `Esc` zero everything at once. The levels are also reset by DISARM, losing the window focus,
   hiding the tab, and entering a text field, so the robot never keeps driving unattended.
 - **Hold: only while pressed.** The old behaviour: an axis is at full MAX only while its key is held.
@@ -118,6 +128,8 @@ The MAX throttle slider defaults to 0.30 (±150 µs, the firmware clamp). The fi
 clamp `MAX_DELTA_US` in `src/config.h` cannot be bypassed: a slider value above it changes nothing.
 
 ## Thruster test procedure (first power-up of all three motors)
+
+Open the **Diagnostics** section (below the Drive panel) first: the tests and Calibration are in it.
 
 Always: **motor clamped, propeller area clear, hand on the power-box e-stop, MAX slider at
 its low default.** Never leave a motor running dry for more than a few seconds.

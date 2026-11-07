@@ -237,7 +237,12 @@
         </select>
       </div>
       <p class="hint" id="drive-mode-hint"></p>
-      <p class="hint lever" id="lever-out"></p>
+
+      <div class="dirpad" id="dirpad" role="group" aria-label="Direction control"></div>
+      <div class="padrow">
+        <button type="button" id="btn-zero" class="btn small" title="Space">Zero all <small>Space</small></button>
+        <span class="hint">Left / Right turn the ROV. Press and hold a button like its key.</span>
+      </div>
 
       <details class="keyhelp">
         <summary>Keys</summary>
@@ -253,37 +258,42 @@
       </details>
     </section>
 
-    <section class="panel" id="panel-thrusters">
-      <h2>Thrusters</h2>
-      <div id="bars" class="bars"></div>
-      <p class="hint">Bar = command being sent. Marker = real pulse from telemetry.</p>
-    </section>
+    <details class="panel wide diag" id="diagnostics">
+      <summary><h2>Diagnostics <small>per-thruster bars, thruster and pin tests, self-check, calibration</small></h2></summary>
+      <div class="diaggrid">
+        <section class="panel" id="panel-thrusters">
+          <h2>Thrusters</h2>
+          <div id="bars" class="bars"></div>
+          <p class="hint">Bar = command being sent. Marker = real pulse from telemetry.</p>
+        </section>
 
-    <section class="panel" id="panel-tests">
-      <h2>Tests <small>press and hold, only while ARMED</small></h2>
-      <h3>Thruster test <small>through output mapping and invert</small></h3>
-      <div id="test-thruster" class="testrow"></div>
-      <h3>Pin test <small>raw, ignores mapping, invert, gain, dead band</small></h3>
-      <div id="test-pin" class="testrow"></div>
-      <p class="hint">Power of both tests = the MAX throttle slider. Motor clamped, hand on the e-stop.</p>
-    </section>
+        <section class="panel" id="panel-tests">
+          <h2>Tests <small>press and hold, only while ARMED</small></h2>
+          <h3>Thruster test <small>through output mapping and invert</small></h3>
+          <div id="test-thruster" class="testrow"></div>
+          <h3>Pin test <small>raw, ignores mapping, invert, gain, dead band</small></h3>
+          <div id="test-pin" class="testrow"></div>
+          <p class="hint">Power of both tests = the MAX throttle slider. Motor clamped, hand on the e-stop.</p>
+        </section>
 
-    <section class="panel" id="panel-selfcheck">
-      <h2>Pin self-check</h2>
-      <button type="button" id="btn-selfcheck" class="btn small">Run R</button>
-      <div id="selfcheck" class="selfcheck"></div>
-      <p class="hint">Needs a jumper from each ESC pin to its readback pin. DRY RUN firmware has no signal.</p>
-    </section>
+        <section class="panel" id="panel-selfcheck">
+          <h2>Pin self-check</h2>
+          <button type="button" id="btn-selfcheck" class="btn small">Run R</button>
+          <div id="selfcheck" class="selfcheck"></div>
+          <p class="hint">Needs a jumper from each ESC pin to its readback pin. DRY RUN firmware has no signal.</p>
+        </section>
 
-    <section class="panel" id="panel-calib">
-      <details>
-        <summary><h2>Calibration</h2></summary>
-        <p class="hint">Saved in this browser. Defaults live in <code>js/config.js</code>. Editable only while disarmed.</p>
-        <div id="calib" class="calib"></div>
-        <p id="calib-warn" class="warn" hidden></p>
-        <button type="button" id="btn-calib-reset" class="btn small">Reset to config.js</button>
-      </details>
-    </section>
+        <section class="panel" id="panel-calib">
+          <details>
+            <summary><h2>Calibration</h2></summary>
+            <p class="hint">Saved in this browser. Defaults live in <code>js/config.js</code>. Editable only while disarmed.</p>
+            <div id="calib" class="calib"></div>
+            <p id="calib-warn" class="warn" hidden></p>
+            <button type="button" id="btn-calib-reset" class="btn small">Reset to config.js</button>
+          </details>
+        </section>
+      </div>
+    </details>
 
     <section class="panel wide" id="panel-mission1">
       <h2>Mission 1: Wi-Fi pairing <small>the ESP32 itself fetches the text, at the surface</small></h2>

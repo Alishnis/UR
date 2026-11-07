@@ -7,7 +7,7 @@ import {
 import { CONFIG } from './config.js';
 import { confirmClick } from './confirm.js';
 import { Controller } from './controller.js';
-import { bindKeyboard, isTypingTarget } from './controls.js';
+import { bindKeyboard, directionLevels, isTypingTarget, PAD_BUTTONS } from './controls.js';
 import { BridgeLink } from './link.js';
 import { fromSlots, isPermutation, NAMES } from './mixer.js';
 import {
@@ -339,8 +339,8 @@ updateMaxUi();
 // ---------------------------------------------------------------------------
 
 const DRIVE_MODE_HINT = {
-  latch: 'Throttle: hold W/S, A/D or R/F to change that level gradually, a short tap changes it a little. '
-    + 'The level STAYS when you let go. Space = all zero, Esc = E-STOP.',
+  latch: 'Throttle: hold a direction button or its key to raise that level gradually, a short tap changes it a little. '
+    + 'The opposite direction lowers it. The level STAYS when you let go. Space = all zero, Esc = E-STOP.',
   hold: 'Hold: an axis is at full MAX only while its key is pressed, and stops when you release it.',
 };
 
@@ -357,15 +357,66 @@ driveModeSel.addEventListener('change', () => {
   }
 });
 
-const levelText = (v) => (v >= 0 ? '+' : '-') + Math.abs(v).toFixed(2);
+// Six-direction pad: Forward, Back, Left, Right, Up, Down. A button presses the key of the same name,
+// so the pad and the keyboard are the same control. Its fill shows the level of that direction.
+const padEls = {};
+
+function buildPad() {
+  const host = $('dirpad');
+  for (const d of PAD_BUTTONS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `btn dirbtn dir-${d.id}`;
+    btn.setAttribute('aria-label', `${d.label} (${d.key})`);
+    const fill = document.createElement('div');
+    fill.className = 'dirfill';
+    const name = document.createElement('span');
+    name.className = 'dirname';
+    name.textContent = d.label;
+    const key = document.createElement('span');
+    key.className = 'dirkey';
+    key.textContent = d.key;
+    const level = document.createElement('span');
+    level.className = 'dirlevel';
+    btn.append(fill, name, key, level);
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      try {
+        btn.setPointerCapture(e.pointerId); // pointerup still arrives if the finger slides off
+      } catch { /* the release events below and the blur / hidden-tab reset still stop it */ }
+      controller.keyDown(d.code);
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      btn.addEventListener(ev, () => controller.keyUp(d.code));
+    }
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    host.append(btn);
+    padEls[d.id] = { btn, fill, level, code: d.code };
+  }
+  $('btn-zero').addEventListener('click', (e) => {
+    controller.zeroLever();
+    e.currentTarget.blur();
+  });
+}
+
+function renderPad() {
+  const levels = directionLevels(controller.axes());
+  for (const [id, el] of Object.entries(padEls)) {
+    const v = levels[id];
+    el.fill.style.height = `${Math.round(v * 100)}%`;
+    el.level.textContent = v > 0 ? `${Math.round(v * 100)} %` : '';
+    el.btn.classList.toggle('has-level', v > 0);
+    el.btn.classList.toggle('pressed', controller.keys.has(el.code));
+    el.btn.disabled = !controller.armed;
+  }
+  $('btn-zero').disabled = !controller.armed;
+}
 
 function renderDriveMode() {
   driveModeSel.disabled = controller.armed;
   $('drive-mode-hint').textContent = DRIVE_MODE_HINT[controller.driveMode];
-  const lev = $('lever-out');
-  lev.hidden = controller.driveMode !== 'latch';
-  const l = controller.lever;
-  lev.textContent = `level  surge ${levelText(l.surge)} | yaw ${levelText(l.yaw)} | heave ${levelText(l.heave)}`;
+  renderPad();
 }
 
 // ---------------------------------------------------------------------------
@@ -1075,6 +1126,7 @@ function tick() {
 }
 
 buildBars();
+buildPad();
 buildTests();
 buildCalibration();
 buildMission1();

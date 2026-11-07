@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { axesFromKeys, bindKeyboard, isTypingTarget } from '../js/controls.js';
+import {
+  axesFromKeys, bindKeyboard, directionLevels, DRIVE_KEYS, isTypingTarget, PAD_BUTTONS,
+} from '../js/controls.js';
 
 test('axesFromKeys maps the documented keys', () => {
   assert.deepEqual(axesFromKeys(new Set(['KeyW'])), { surge: 1, yaw: 0, heave: 0 });
@@ -159,4 +161,26 @@ test('keyboard: unbind removes every listener', () => {
   r.unbind();
   assert.deepEqual(Object.keys(r.handlers.win), []);
   assert.deepEqual(Object.keys(r.handlers.doc), []);
+});
+
+test('PAD_BUTTONS: exactly the six directions, each pressing a real drive key', () => {
+  assert.deepEqual(PAD_BUTTONS.map((b) => b.id), ['forward', 'back', 'left', 'right', 'up', 'down']);
+  assert.equal(new Set(PAD_BUTTONS.map((b) => b.code)).size, 6);
+  const expected = { forward: ['surge', 1], back: ['surge', -1], left: ['yaw', -1], right: ['yaw', 1], up: ['heave', 1], down: ['heave', -1] };
+  for (const b of PAD_BUTTONS) {
+    const k = DRIVE_KEYS[b.code];
+    assert.ok(k, b.code);
+    assert.deepEqual([k.axis, k.dir], expected[b.id], b.id);
+    assert.equal(b.code, `Key${b.key}`);
+  }
+});
+
+test('directionLevels: each axis fills one of its two directions, never both', () => {
+  assert.deepEqual(directionLevels({ surge: 0.5, yaw: -0.25, heave: 1 }),
+    { forward: 0.5, back: 0, right: 0, left: 0.25, up: 1, down: 0 });
+  assert.deepEqual(directionLevels({ surge: -1, yaw: 1, heave: -0.4 }),
+    { forward: 0, back: 1, right: 1, left: 0, up: 0, down: 0.4 });
+  assert.deepEqual(directionLevels({}), { forward: 0, back: 0, right: 0, left: 0, up: 0, down: 0 });
+  assert.deepEqual(directionLevels(), { forward: 0, back: 0, right: 0, left: 0, up: 0, down: 0 });
+  assert.equal(directionLevels({ surge: 3 }).forward, 1);   // never above 1
 });

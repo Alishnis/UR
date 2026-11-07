@@ -91,7 +91,6 @@ body.armed .armstate { background: #3a1010; color: var(--bad); }
 /* ---- sliders ---- */
 .slider { display: grid; grid-template-columns: 110px 1fr 56px; align-items: center; gap: 8px; margin: 8px 0; }
 .slider select { grid-column: 2 / 4; min-width: 0; max-width: none; }
-.lever { font-variant-numeric: tabular-nums; color: var(--text); }
 .slider output { text-align: right; font-variant-numeric: tabular-nums; }
 input[type="range"] { width: 100%; }
 .meter { height: 10px; background: #0e1217; border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
@@ -448,3 +447,30 @@ body.bigview #notice {
 
 /* two-click confirmation (confirm.js) */
 .btn.confirming { background: var(--warn); border-color: var(--warn); color: #000; }
+
+/* ---- six-direction pad ---- */
+.dirpad {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 6px;
+  grid-template-areas: ". forward . up" "left back right down";
+}
+.dir-forward { grid-area: forward; } .dir-back { grid-area: back; }
+.dir-left { grid-area: left; } .dir-right { grid-area: right; }
+.dir-up { grid-area: up; } .dir-down { grid-area: down; }
+.dirbtn {
+  position: relative; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 14px 4px 12px; min-height: 74px;
+}
+.dirbtn > span { position: relative; } /* text above the level fill */
+.dirname { font-weight: 700; font-size: 15px; }
+.dirkey { font-size: 11px; color: var(--dim); }
+.dirlevel { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--dim); }
+.dirfill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--accent); opacity: 0.4; pointer-events: none; }
+.dirbtn.pressed { border-color: var(--accent); background: #26405a; }
+.dirbtn.has-level .dirlevel { color: var(--text); font-weight: 600; }
+.padrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; }
+.padrow .hint { margin: 0; }
+
+/* ---- diagnostics (per-thruster panels) ---- */
+.diag > summary { cursor: pointer; }
+.diag > summary small { color: var(--dim); font-weight: 400; font-size: 12px; margin-left: 6px; }
+.diaggrid { display: grid; gap: 12px; margin-top: 12px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }

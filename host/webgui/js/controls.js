@@ -11,6 +11,28 @@ export const DRIVE_KEYS = {
   KeyR: { axis: 'heave', dir: +1 },
   KeyF: { axis: 'heave', dir: -1 },
 };
+// The six ways the vehicle can be driven, as on-screen buttons and level bars. Left / Right turn the
+// ROV (it has no sideways thruster). Every pad button presses the key of the same name.
+export const PAD_BUTTONS = [
+  { id: 'forward', label: 'Forward', key: 'W', code: 'KeyW' },
+  { id: 'back', label: 'Back', key: 'S', code: 'KeyS' },
+  { id: 'left', label: 'Left', key: 'A', code: 'KeyA' },
+  { id: 'right', label: 'Right', key: 'D', code: 'KeyD' },
+  { id: 'up', label: 'Up', key: 'R', code: 'KeyR' },
+  { id: 'down', label: 'Down', key: 'F', code: 'KeyF' },
+];
+
+// {surge, yaw, heave} in -1..1 -> the level (0..1) of each of the six directions. Opposite directions
+// are never both above zero.
+export function directionLevels({ surge = 0, yaw = 0, heave = 0 } = {}) {
+  const pos = (v) => Math.min(1, Math.max(0, v));
+  return {
+    forward: pos(surge), back: pos(-surge),
+    right: pos(yaw), left: pos(-yaw),
+    up: pos(heave), down: pos(-heave),
+  };
+}
+
 export const KEY_ZERO = 'Space';
 export const KEY_ESTOP = 'Escape';
 export const KEY_MAG_DOWN = 'KeyJ';
