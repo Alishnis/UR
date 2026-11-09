@@ -31,9 +31,10 @@ DETECTOR_THREADS = 2  # the bridge runs 2 vision workers: more threads per detec
 # the wrong (mirror) pose solution must fit the corners this many times worse for the yaw sign to be trusted
 YAW_AMBIGUITY_RATIO = 2.0
 # pupil-apriltags 1.0.4 SEGFAULTS (kills the bridge) on small images, sometimes only now and then (seen on
-# Linux with a 40 x 40 frame at decimate 4). It shrinks the image by `decimate` first, so the limit applies to
-# the SHRUNK size; a tag needs ~20 px anyway
-MIN_IMAGE_PX = 32
+# Linux with a 40 x 40 frame at decimate 4, and on macOS CI with frames of 40..127 px). It shrinks the image
+# by `decimate` first, so the limit applies to the SHRUNK size. 128: the GUI sends 1280 x 720 frames, so
+# even at decimate 4 (180 px) they pass; nothing smaller ever holds a readable tag in practice.
+MIN_IMAGE_PX = 128
 
 # quad_sigma (Gaussian pre-blur before finding edges) per pass: none for the raw pass (small tags),
 # light for the CLAHE pass (CLAHE also boosts sensor noise)

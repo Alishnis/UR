@@ -129,17 +129,20 @@ def test_tiny_frames_do_not_crash_the_detector(decimate):
 
 
 def test_the_size_limit_counts_the_image_after_decimation(monkeypatch):
-    """A 64 px frame is fine at decimate 1 or 2 but too small for the detector at decimate 4 (16 px)."""
+    """A 256 px frame is fine at decimate 1 or 2 but too small for the detector at decimate 4 (64 px)."""
     from vision import tags
 
     calls = []
     monkeypatch.setattr(tags, "_run", lambda gray, decimate, sigma: calls.append(gray.shape) or [])
-    frame = np.full((64, 64, 3), 90, np.uint8)
+    frame = np.full((256, 256, 3), 90, np.uint8)
     detect_tags(frame, {"decimate": 2, "clahe": False})
-    assert calls, "64 px at decimate 2 is 32 px: it must run"
+    assert calls, "256 px at decimate 2 is 128 px: it must run"
     calls.clear()
     detect_tags(frame, {"decimate": 4, "clahe": False})
-    assert not calls, "64 px at decimate 4 is 16 px: the C library must never see it"
+    assert not calls, "256 px at decimate 4 is 64 px: the C library must never see it"
+    calls.clear()
+    detect_tags(np.full((720, 1280, 3), 90, np.uint8), {"decimate": 4, "clahe": False})
+    assert calls, "the GUI's 1280 x 720 frames must still run at decimate 4"
 
 
 def test_params_are_sanitised():
