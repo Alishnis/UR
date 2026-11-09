@@ -2,9 +2,12 @@
 // No DOM, no timers: call step(dtSeconds) from the 20 Hz loop. Unit-tested.
 
 import { CONFIG } from './config.js';
-import { axesFromKeys, DRIVE_KEYS, KEY_MAG_DOWN, KEY_MAG_UP, KEY_ZERO } from './controls.js';
 import {
-  clamp, encodeD, isPermutation, mix, pinTestSlots, rampToward, thrusterTestSlots,
+  axesFromKeys, DRIVE_KEYS, KEY_MAG_DOWN, KEY_MAG_UP, KEY_ZERO, reverseSign, THRUSTER_CODES,
+  thrustersFromButtons,
+} from './controls.js';
+import {
+  clamp, encodeD, isPermutation, mix, NAMES, pinTestSlots, rampToward, thrusterTestSlots,
   toSlots, toTargets,
 } from './mixer.js';
 
@@ -21,8 +24,13 @@ export class Controller {
     // 'hold': an axis is full only while its key is pressed. 'latch' (Throttle mode): a held key moves
     // the level of its axis gradually (lever) and the level stays after the key is released.
     this.driveMode = opts.driveMode === 'latch' ? 'latch' : 'hold';
-    this.leverRate = opts.leverRatePerSec ?? CONFIG.driveMode.ratePerSec;
+    // Throttle mode power is a whole number of levels (1..levels each way); lever / direct hold level / levels.
+    this.levels = Math.max(1, Math.round(opts.levels ?? CONFIG.driveMode.levels));
+    this.repeatDelay = opts.repeatDelaySec ?? CONFIG.driveMode.repeatDelaySec;
+    this.repeatEvery = 1 / (opts.repeatPerSec ?? CONFIG.driveMode.repeatPerSec);
+    this.holdAge = new Map(); // key code -> {age, next} seconds, for the auto-repeat of a held key
     this.lever = { surge: 0, yaw: 0, heave: 0 };
+    this.direct = { left: 0, right: 0, vert: 0 }; // L / R / U thruster levels (Throttle mode)
     this.armed = false;
     this.keys = new Set();
     this.test = null; // {kind:'thruster', name, sign} | {kind:'pin', slot, sign}
@@ -51,6 +59,13 @@ export class Controller {
 
   zeroLever() {
     this.lever = { surge: 0, yaw: 0, heave: 0 };
+    this.direct = { left: 0, right: 0, vert: 0 };
+  }
+
+  // The L / R / U thruster keys (-1..1 per thruster): the direct levels in Throttle mode, the held keys
+  // (Reverse button = backwards) in Hold mode. Added on top of the mixed six-direction command.
+  directLevels() {
+    return this.driveMode === 'latch' ? { ...this.direct } : thrustersFromButtons(this.keys);
   }
 
   // The surge / yaw / heave the vehicle is being driven with (-1..1): the lever levels in Throttle mode,
@@ -68,6 +83,7 @@ export class Controller {
     this.current = [0, 0, 0];
     this.test = null;
     this.zeroLever(); // always start from stop
+    this.holdAge.clear(); // a key already down when arming must be pressed again
     this.armed = true;
     return { ok: true };
   }
@@ -86,7 +102,11 @@ export class Controller {
 
   // -- keyboard -------------------------------------------------------
   keyDown(code) {
+    if (this.keys.has(code)) return;
     this.keys.add(code);
+    this.holdAge.set(code, { age: 0, next: this.repeatDelay });
+    // Throttle mode: a press is one level step, at once (a tap shorter than one tick still counts).
+    if (this.driveMode === 'latch' && this.armed && !this.test) this.stepLevel(code);
   }
 
   keyUp(code) {
@@ -163,6 +183,10 @@ export class Controller {
       } else {
         if (this.driveMode === 'latch') this.moveLever(dt);
         const logical = mix(this.axes(), this.magnitude);
+        const direct = this.directLevels();
+        for (const name of NAMES) {
+          if (direct[name]) logical[name] = clamp(logical[name] + direct[name] * this.magnitude, -1, 1);
+        }
         target = toSlots(toTargets(logical, this.cal.thrusters, this.maxThrottle), this.cal.outputSlot);
       }
     }
@@ -172,11 +196,30 @@ export class Controller {
     return { line: encodeD(this.current), slots: [...this.current], armed: true };
   }
 
-  // Throttle mode: each held drive key moves the level of its axis by leverRate per second; opposite
-  // keys cancel; the level stays within -1..1 and stays where it is when the key is released.
+  // One level step for a drive / thruster key (Throttle mode): +-1 of `levels`, within -levels..levels.
+  // The key's own direction for W/S/A/D/R/F; the thruster buttons go forward, or back while Reverse is on.
+  stepLevel(code) {
+    const drive = DRIVE_KEYS[code];
+    const thr = THRUSTER_CODES[code];
+    if (!drive && !thr) return;
+    const group = drive ? this.lever : this.direct;
+    const name = drive ? drive.axis : thr;
+    const delta = drive ? drive.dir : reverseSign(this.keys);
+    const steps = clamp(Math.round(group[name] * this.levels) + delta, -this.levels, this.levels);
+    group[name] = steps / this.levels;
+  }
+
+  // Throttle mode: a key held down repeats its level step (after repeatDelay, then repeatEvery).
+  // Opposite keys cancel; the levels stay where they are when the keys are released.
   moveLever(dt) {
-    for (const [code, { axis, dir }] of Object.entries(DRIVE_KEYS)) {
-      if (this.keys.has(code)) this.lever[axis] = clamp(this.lever[axis] + dir * this.leverRate * dt, -1, 1);
+    for (const code of this.keys) {
+      const h = this.holdAge.get(code);
+      if (!h) continue;
+      h.age += dt;
+      while (h.age >= h.next) {
+        this.stepLevel(code);
+        h.next += this.repeatEvery;
+      }
     }
   }
 }

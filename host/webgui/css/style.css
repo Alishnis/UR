@@ -467,6 +467,10 @@ body.bigview #notice {
 .dirfill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--accent); opacity: 0.4; pointer-events: none; }
 .dirbtn.pressed { border-color: var(--accent); background: #26405a; }
 .dirbtn.has-level .dirlevel { color: var(--text); font-weight: 600; }
+.thrpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0; }
+.thrpad .dirbtn { min-height: 62px; padding: 10px 4px 8px; }
+.dirbtn.reverse .dirfill { background: var(--warn); }
+#btn-reverse.on { background: var(--warn); border-color: var(--warn); color: #000; }
 .padrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; }
 .padrow .hint { margin: 0; }
 

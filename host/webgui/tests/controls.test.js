@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  axesFromKeys, bindKeyboard, directionLevels, DRIVE_KEYS, isTypingTarget, PAD_BUTTONS,
+  HANDLED_CODES, axesFromKeys, bindKeyboard, directionLevels, DRIVE_KEYS, isTypingTarget, PAD_BUTTONS,
+  thrustersFromButtons,
 } from '../js/controls.js';
 
 test('axesFromKeys maps the documented keys', () => {
@@ -183,4 +184,21 @@ test('directionLevels: each axis fills one of its two directions, never both', (
   assert.deepEqual(directionLevels({}), { forward: 0, back: 0, right: 0, left: 0, up: 0, down: 0 });
   assert.deepEqual(directionLevels(), { forward: 0, back: 0, right: 0, left: 0, up: 0, down: 0 });
   assert.equal(directionLevels({ surge: 3 }).forward, 1);   // never above 1
+});
+
+test('thrustersFromButtons: the three buttons, Reverse flips them, keyboard keys are ignored', () => {
+  assert.deepEqual(thrustersFromButtons(new Set(['BtnThrLeft'])), { left: 1, right: 0, vert: 0 });
+  assert.deepEqual(thrustersFromButtons(new Set(['BtnThrRight', 'BtnThrVert'])), { left: 0, right: 1, vert: 1 });
+  assert.deepEqual(thrustersFromButtons(new Set(['BtnThrReverse', 'BtnThrVert'])), { left: 0, right: 0, vert: -1 });
+  assert.deepEqual(thrustersFromButtons(new Set(['KeyL', 'KeyR', 'KeyU', 'ShiftLeft'])), { left: 0, right: 0, vert: 0 });
+  for (const code of ['BtnThrLeft', 'BtnThrRight', 'BtnThrVert', 'BtnThrReverse', 'KeyL', 'KeyU']) {
+    assert.equal(HANDLED_CODES.has(code), false, code); // no key can reach them
+  }
+  assert.equal(HANDLED_CODES.has('KeyR'), true); // R = Up
+});
+
+test('THRUSTER_BUTTONS: one on-screen button per thruster, same names as the mixer', async () => {
+  const { THRUSTER_BUTTONS, THRUSTER_CODES } = await import('../js/controls.js');
+  assert.deepEqual(THRUSTER_BUTTONS.map((b) => b.code).sort(), Object.keys(THRUSTER_CODES).sort());
+  for (const b of THRUSTER_BUTTONS) assert.equal(THRUSTER_CODES[b.code], b.id);
 });

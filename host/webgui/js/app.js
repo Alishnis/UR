@@ -7,7 +7,9 @@ import {
 import { CONFIG } from './config.js';
 import { confirmClick } from './confirm.js';
 import { Controller } from './controller.js';
-import { bindKeyboard, directionLevels, isTypingTarget, PAD_BUTTONS } from './controls.js';
+import {
+  bindKeyboard, directionLevels, isTypingTarget, PAD_BUTTONS, REVERSE_CODE, THRUSTER_BUTTONS,
+} from './controls.js';
 import { BridgeLink } from './link.js';
 import { fromSlots, isPermutation, NAMES } from './mixer.js';
 import {
@@ -339,8 +341,9 @@ updateMaxUi();
 // ---------------------------------------------------------------------------
 
 const DRIVE_MODE_HINT = {
-  latch: 'Throttle: hold a direction button or its key to raise that level gradually, a short tap changes it a little. '
-    + 'The opposite direction lowers it. The level STAYS when you let go. Space = all zero, Esc = E-STOP.',
+  latch: `Throttle: power has ${controller.levels} levels each way. Each press of a direction button or its key `
+    + 'is one level up (hold it to keep stepping), the opposite direction is one level down, through 0 into reverse. '
+    + 'The level STAYS when you let go. Space = all zero, Esc = E-STOP.',
   hold: 'Hold: an axis is at full MAX only while its key is pressed, and stops when you release it.',
 };
 
@@ -361,43 +364,58 @@ driveModeSel.addEventListener('change', () => {
 // so the pad and the keyboard are the same control. Its fill shows the level of that direction.
 const padEls = {};
 
-function buildPad() {
-  const host = $('dirpad');
-  for (const d of PAD_BUTTONS) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `btn dirbtn dir-${d.id}`;
-    btn.setAttribute('aria-label', `${d.label} (${d.key})`);
-    const fill = document.createElement('div');
-    fill.className = 'dirfill';
-    const name = document.createElement('span');
-    name.className = 'dirname';
-    name.textContent = d.label;
-    const key = document.createElement('span');
-    key.className = 'dirkey';
-    key.textContent = d.key;
-    const level = document.createElement('span');
-    level.className = 'dirlevel';
-    btn.append(fill, name, key, level);
-    btn.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      e.preventDefault();
-      try {
-        btn.setPointerCapture(e.pointerId); // pointerup still arrives if the finger slides off
-      } catch { /* the release events below and the blur / hidden-tab reset still stop it */ }
-      controller.keyDown(d.code);
-    });
-    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-      btn.addEventListener(ev, () => controller.keyUp(d.code));
-    }
-    btn.addEventListener('contextmenu', (e) => e.preventDefault());
-    host.append(btn);
-    padEls[d.id] = { btn, fill, level, code: d.code };
+// One press-and-hold button that presses the key `d.code` (shared by both pads).
+function addHoldButton(host, d, cls) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `btn dirbtn ${cls}`;
+  btn.setAttribute('aria-label', `${d.label} (${d.key})`);
+  const fill = document.createElement('div');
+  fill.className = 'dirfill';
+  const name = document.createElement('span');
+  name.className = 'dirname';
+  name.textContent = d.label;
+  const key = document.createElement('span');
+  key.className = 'dirkey';
+  key.textContent = d.key;
+  const level = document.createElement('span');
+  level.className = 'dirlevel';
+  btn.append(fill, name, key, level);
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    try {
+      btn.setPointerCapture(e.pointerId); // pointerup still arrives if the finger slides off
+    } catch { /* the release events below and the blur / hidden-tab reset still stop it */ }
+    controller.keyDown(d.code);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    btn.addEventListener(ev, () => controller.keyUp(d.code));
   }
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  host.append(btn);
+  return { btn, fill, level, code: d.code };
+}
+
+const thrPadEls = {};
+
+function buildPad() {
+  for (const d of PAD_BUTTONS) padEls[d.id] = addHoldButton($('dirpad'), d, `dir-${d.id}`);
+  for (const d of THRUSTER_BUTTONS) thrPadEls[d.id] = addHoldButton($('thrpad'), d, `thr-${d.id}`);
   $('btn-zero').addEventListener('click', (e) => {
     controller.zeroLever();
     e.currentTarget.blur();
   });
+  // Reverse: a toggle for the thruster buttons (on = they push their thruster backwards).
+  $('btn-reverse').addEventListener('click', (e) => {
+    if (controller.keys.has(REVERSE_CODE)) controller.keyUp(REVERSE_CODE); else controller.keyDown(REVERSE_CODE);
+    e.currentTarget.blur();
+  });
+}
+
+// 0..1 -> 'level/levels', e.g. '3/7'.
+function levelText(v) {
+  return `${Math.round(v * controller.levels)}/${controller.levels}`;
 }
 
 function renderPad() {
@@ -405,12 +423,31 @@ function renderPad() {
   for (const [id, el] of Object.entries(padEls)) {
     const v = levels[id];
     el.fill.style.height = `${Math.round(v * 100)}%`;
-    el.level.textContent = v > 0 ? `${Math.round(v * 100)} %` : '';
+    el.level.textContent = v > 0 ? levelText(v) : '';
     el.btn.classList.toggle('has-level', v > 0);
     el.btn.classList.toggle('pressed', controller.keys.has(el.code));
     el.btn.disabled = !controller.armed;
   }
+  // Single thrusters: the fill is the size of the level, the text keeps the sign (negative = reverse).
+  const direct = controller.directLevels();
+  for (const [id, el] of Object.entries(thrPadEls)) {
+    const v = direct[id];
+    el.fill.style.height = `${Math.round(Math.abs(v) * 100)}%`;
+    el.level.textContent = v !== 0 ? `${v < 0 ? '-' : ''}${levelText(Math.abs(v))}` : '';
+    el.btn.classList.toggle('has-level', v !== 0);
+    el.btn.classList.toggle('reverse', v < 0);
+    el.btn.classList.toggle('pressed', controller.keys.has(el.code));
+    el.btn.disabled = !controller.armed;
+  }
+  const rev = reverseHeld();
+  $('btn-reverse').classList.toggle('on', rev);
+  $('btn-reverse').setAttribute('aria-pressed', String(rev));
+  $('btn-reverse').disabled = !controller.armed;
   $('btn-zero').disabled = !controller.armed;
+}
+
+function reverseHeld() {
+  return controller.keys.has(REVERSE_CODE);
 }
 
 function renderDriveMode() {

@@ -201,7 +201,7 @@
                 <button type="button" id="m5-import" class="btn small">Import</button>
                 <input type="file" id="m5-file" accept=".json,application/json" hidden>
               </div>
-              <p class="hint">Click = new range from the clicked spot. Shift+click = widen the range to include it. Calibrate in the pool, not in air.</p>
+              <p class="hint">Colours are judged after a water-colour balance, so the defaults should already find the poles. Click a pole only if it is missed: the default range is widened just enough to include it (never narrowed). Shift+click = widen the current range further.</p>
             </details>
           </div>
         </aside>
@@ -239,17 +239,20 @@
       <p class="hint" id="drive-mode-hint"></p>
 
       <div class="dirpad" id="dirpad" role="group" aria-label="Direction control"></div>
+      <div class="thrpad" id="thrpad" role="group" aria-label="Single thruster control"></div>
       <div class="padrow">
+        <button type="button" id="btn-reverse" class="btn small" aria-pressed="false" title="Thruster buttons push backwards while on">Reverse</button>
         <button type="button" id="btn-zero" class="btn small" title="Space">Zero all <small>Space</small></button>
-        <span class="hint">Left / Right turn the ROV. Press and hold a button like its key.</span>
+        <span class="hint">Left / Right turn the ROV. Press and hold a button like its key. The three thruster buttons drive one thruster alone; Reverse flips them.</span>
       </div>
 
       <details class="keyhelp">
         <summary>Keys</summary>
         <table>
-          <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>forward / back (Throttle mode: raise / lower the level)</td></tr>
+          <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>forward / back (Throttle mode: one press = one power level up / down)</td></tr>
           <tr><td><kbd>A</kbd> <kbd>D</kbd></td><td>yaw left / right (same)</td></tr>
           <tr><td><kbd>R</kbd> <kbd>F</kbd></td><td>up / down (same)</td></tr>
+          <tr><td>buttons</td><td>Left / Right / Up thruster alone: on-screen buttons only (no key). Reverse button = backwards</td></tr>
           <tr><td><kbd>J</kbd> <kbd>K</kbd></td><td>lower / raise magnitude</td></tr>
           <tr><td><kbd>Space</kbd></td><td>all zero at once (also clears the Throttle levels)</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>E-STOP (disarm), works while typing</td></tr>

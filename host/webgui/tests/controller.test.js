@@ -315,53 +315,62 @@ test('every line the controller emits matches the protocol grammar', () => {
 
 // ---- Throttle mode (driveMode 'latch'): keys move a level gradually and it stays ----------------
 
-const latch = (o = {}) => make(cal(), { driveMode: 'latch', leverRatePerSec: 0.5, ...o });
+const LV = 7;
+const latch = (o = {}) => make(cal(), { driveMode: 'latch', levels: LV, repeatDelaySec: 0.5, repeatPerSec: 4, ...o });
+const press = (c, code) => { c.keyDown(code); c.keyUp(code); };
 
-test('latch: a held key raises the level gradually and it stays after the key is released', () => {
+test('latch: one press is one level, and the level stays after release', () => {
   const c = latch();
   c.arm();
-  c.keyDown('KeyW');
-  run(c, 1);                       // 1 s at 0.5 per second
-  near(c.lever.surge, 0.5, 1e-6);
-  c.keyUp('KeyW');
+  press(c, 'KeyW');                // a tap shorter than one tick still counts
+  near(c.lever.surge, 1 / LV);
+  press(c, 'KeyW');
+  press(c, 'KeyW');
+  near(c.lever.surge, 3 / LV);
   const r = run(c, 1);             // nothing pressed: the level must not decay
-  near(c.lever.surge, 0.5, 1e-6);
-  near(r.slots[0], 0.5 * 0.3, 1e-6); // 0.5 of the MAX throttle (0.3), still driving
-  near(r.slots[1], 0.5 * 0.3, 1e-6);
+  near(c.lever.surge, 3 / LV);
+  near(r.slots[0], (3 / LV) * 0.3, 1e-6); // level 3 of 7 of the MAX throttle (0.3)
+  near(r.slots[1], (3 / LV) * 0.3, 1e-6);
 });
 
-test('latch: a short tap changes the level only a little', () => {
+test('latch: the levels are whole steps, never in between', () => {
   const c = latch();
   c.arm();
   c.keyDown('KeyW');
-  c.step(DT);
-  c.step(DT);                      // 0.1 s
+  run(c, 1.3);                     // a held key: the first step, then repeats
   c.keyUp('KeyW');
-  near(c.lever.surge, 0.05, 1e-6);
-  assert.equal(run(c, 1).line, 'D 0.015 0.015 0.000');
+  assert.ok(Number.isInteger(Math.round(c.lever.surge * LV * 1e6) / 1e6), `${c.lever.surge}`);
+  near(c.lever.surge * LV, Math.round(c.lever.surge * LV), 1e-9);
+});
+
+test('latch: a held key waits repeatDelay, then steps repeatPerSec times a second', () => {
+  const c = latch();
+  c.arm();
+  c.keyDown('KeyW');
+  near(c.lever.surge * LV, 1);
+  run(c, 0.4);
+  near(c.lever.surge * LV, 1);     // still inside the delay
+  run(c, 0.2);                     // 0.6 s: first repeat at 0.5 s
+  near(c.lever.surge * LV, 2);
+  run(c, 0.5);                     // 1.1 s: repeats at 0.75 and 1.0
+  near(c.lever.surge * LV, 4);
 });
 
 test('latch: the opposite key lowers the level, through zero into reverse', () => {
   const c = latch();
   c.arm();
-  c.keyDown('KeyW');
-  run(c, 1);
-  c.keyUp('KeyW');
-  c.keyDown('KeyS');
-  run(c, 1.5);                     // 0.5 - 0.75
-  near(c.lever.surge, -0.25, 1e-6);
-  assert.ok(run(c, 0.5).slots[0] < 0);
+  for (let i = 0; i < 3; i++) press(c, 'KeyW');
+  for (let i = 0; i < 5; i++) press(c, 'KeyS');
+  near(c.lever.surge, -2 / LV);
+  assert.ok(run(c, 1).slots[0] < 0);
 });
 
-test('latch: the level never leaves -1..1', () => {
+test('latch: the level never leaves -levels..levels', () => {
   const c = latch();
   c.arm();
-  c.keyDown('KeyR');
-  run(c, 5);
+  for (let i = 0; i < 20; i++) press(c, 'KeyR');
   near(c.lever.heave, 1);
-  c.keyUp('KeyR');
-  c.keyDown('KeyF');
-  run(c, 10);
+  for (let i = 0; i < 30; i++) press(c, 'KeyF');
   near(c.lever.heave, -1);
 });
 
@@ -370,22 +379,21 @@ test('latch: opposite keys together cancel, axes are independent', () => {
   c.arm();
   c.keyDown('KeyW');
   c.keyDown('KeyS');
-  run(c, 1);
   near(c.lever.surge, 0);
+  c.keyUp('KeyW');
   c.keyUp('KeyS');
-  c.keyDown('KeyD');
-  run(c, 1);
-  near(c.lever.surge, 0.5, 1e-6);
-  near(c.lever.yaw, 0.5, 1e-6);
+  press(c, 'KeyW');
+  press(c, 'KeyD');
+  near(c.lever.surge, 1 / LV);
+  near(c.lever.yaw, 1 / LV);
   near(c.lever.heave, 0);
 });
 
 test('latch: Space zeroes the levels and the output at once', () => {
   const c = latch();
   c.arm();
-  c.keyDown('KeyW');
-  run(c, 2);
-  c.keyUp('KeyW');
+  for (let i = 0; i < 4; i++) press(c, 'KeyW');
+  run(c, 1);
   c.keyDown('Space');
   const r = c.step(DT);
   assert.equal(r.line, 'D 0.000 0.000 0.000');
@@ -425,11 +433,11 @@ test('latch: while disarmed the keys change nothing', () => {
 });
 
 test('latch: the output still ramps (no jump) and a running thruster test freezes the levels', () => {
-  const c = latch({ leverRatePerSec: 4 });   // fast lever so the ramp is the limit
+  const c = latch({ levels: 1 });            // one press = full, so the ramp is the only limit
   c.arm();
   c.keyDown('KeyW');
   const first = c.step(DT);
-  assert.ok(first.slots[0] <= 1.5 * DT + 1e-9);
+  assert.ok(first.slots[0] > 0 && first.slots[0] <= 1.5 * DT + 1e-9);
   c.keyUp('KeyW');
   c.startThrusterTest('left', +1);
   const before = c.lever.surge;
@@ -441,9 +449,8 @@ test('latch: the output still ramps (no jump) and a running thruster test freeze
 test('latch: MAX throttle still scales the result and magnitude still applies', () => {
   const c = latch();
   c.arm();
-  c.keyDown('KeyW');
-  run(c, 2);                                  // lever 1.0
-  c.keyUp('KeyW');
+  for (let i = 0; i < LV; i++) press(c, 'KeyW'); // top level
+  near(c.lever.surge, 1);
   c.setMaxThrottle(0.2);
   assert.equal(run(c, 2).line, 'D 0.200 0.200 0.000');
   c.keyDown('KeyJ');
@@ -457,10 +464,8 @@ test('setDriveMode: only latch or hold, refused while armed, clears the levels, 
   assert.equal(c.setDriveMode('turbo'), false);
   assert.equal(c.driveMode, 'latch');
   c.arm();
-  c.keyDown('KeyW');
-  run(c, 1);
-  c.keyUp('KeyW');
-  near(c.axes().surge, 0.5, 1e-6);
+  for (let i = 0; i < 3; i++) press(c, 'KeyW');
+  near(c.axes().surge, 3 / LV);
   assert.equal(c.axes().yaw, 0);
   assert.equal(c.setDriveMode('hold'), false);   // armed
   c.disarm();
@@ -478,4 +483,96 @@ test('hold mode is the default and is unchanged: full on press, stop on release'
   assert.equal(run(c, 1).line, 'D 0.300 0.300 0.000');
   c.keyUp('KeyW');
   assert.equal(run(c, 1).line, 'D 0.000 0.000 0.000');
+});
+
+// -- single-thruster buttons (Left / Right / Up, Reverse toggle): buttons only, no keyboard key -----------------------------------
+test('hold: the Left button drives only the left thruster, Right only the right, Up only the vertical one', () => {
+  for (const [code, want] of [['BtnThrLeft', [0.3, 0, 0]], ['BtnThrRight', [0, 0.3, 0]], ['BtnThrVert', [0, 0, 0.3]]]) {
+    const c = make();
+    c.arm();
+    c.keyDown(code);
+    assert.deepEqual(run(c, 0.5).slots, want, code);
+    c.keyUp(code);
+    assert.deepEqual(run(c, 1).slots, [0, 0, 0], `${code} released`);
+  }
+});
+
+test('hold: Reverse on makes a thruster button push backwards', () => {
+  const c = make();
+  c.arm();
+  c.keyDown('BtnThrReverse');
+  c.keyDown('BtnThrLeft');
+  assert.deepEqual(run(c, 0.5).slots, [-0.3, 0, 0]);
+});
+
+test('hold: a thruster key adds to the six-direction command and never exceeds full', () => {
+  const c = make();
+  c.arm();
+  c.keyDown('KeyW'); // left = right = 1
+  c.keyDown('BtnThrLeft'); // left would be 2 -> clamped to 1
+  assert.deepEqual(run(c, 1).slots, [0.3, 0.3, 0]);
+});
+
+test('latch: a thruster button steps its level, it stays after release, with Reverse on it steps down', () => {
+  const c = latch();
+  c.arm();
+  press(c, 'BtnThrRight');
+  press(c, 'BtnThrRight');
+  near(c.direct.right, 2 / LV);
+  run(c, 2);
+  near(c.direct.right, 2 / LV);
+  assert.ok(c.step(DT).slots[1] > 0, 'the right thruster keeps running');
+  assert.equal(c.direct.left, 0);
+  c.keyDown('BtnThrReverse');
+  press(c, 'BtnThrRight');
+  press(c, 'BtnThrRight');
+  press(c, 'BtnThrRight');
+  near(c.direct.right, -1 / LV);
+});
+
+test('latch: Space and DISARM clear the thruster levels', () => {
+  const c = latch();
+  c.arm();
+  press(c, 'BtnThrVert');
+  near(c.direct.vert, 1 / LV);
+  c.keyDown('Space');
+  c.step(DT);
+  near(c.direct.vert, 0);
+  c.keyUp('Space');
+  press(c, 'BtnThrLeft');
+  near(c.direct.left, 1 / LV);
+  c.disarm();
+  near(c.direct.left, 0);
+});
+
+test('latch: levels option - 3 levels means thirds, one press at a time', () => {
+  const c = latch({ levels: 3 });
+  c.arm();
+  press(c, 'KeyW');
+  near(c.lever.surge, 1 / 3);
+  press(c, 'KeyW');
+  press(c, 'KeyW');
+  press(c, 'KeyW');
+  near(c.lever.surge, 1);
+});
+
+test('latch: a key already down when arming does nothing until it is pressed again', () => {
+  const c = latch();
+  c.keyDown('KeyW');
+  c.arm();
+  run(c, 2);
+  near(c.lever.surge, 0);
+  c.keyUp('KeyW');
+  press(c, 'KeyW');
+  near(c.lever.surge, 1 / LV);
+});
+
+test('the keyboard cannot reach a single thruster: R is Up (heave), there are no thruster keys', () => {
+  const c = make();
+  c.arm();
+  c.keyDown('KeyR');
+  assert.deepEqual(run(c, 0.5).slots, [0, 0, 0.3]); // vertical thruster only, as heave
+  c.keyUp('KeyR');
+  for (const code of ['KeyL', 'KeyU', 'ShiftLeft', 'ShiftRight']) c.keyDown(code);
+  assert.deepEqual(run(c, 1).slots, [0, 0, 0]);
 });

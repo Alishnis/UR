@@ -11,6 +11,19 @@ export const DRIVE_KEYS = {
   KeyR: { axis: 'heave', dir: +1 },
   KeyF: { axis: 'heave', dir: -1 },
 };
+// Direct control of one thruster, on top of the six directions: ON-SCREEN BUTTONS ONLY (no keyboard
+// key). The buttons press these codes on the controller; no physical key has such a code, and they are
+// not in HANDLED_CODES, so the keyboard can never drive a single thruster. The Reverse toggle button
+// holds REVERSE_CODE: while it is on, the thruster buttons push their thruster backwards.
+export const THRUSTER_CODES = { BtnThrLeft: 'left', BtnThrRight: 'right', BtnThrVert: 'vert' };
+export const REVERSE_CODE = 'BtnThrReverse';
+
+export const THRUSTER_BUTTONS = [
+  { id: 'left', label: 'Left thruster', key: 'click', code: 'BtnThrLeft' },
+  { id: 'right', label: 'Right thruster', key: 'click', code: 'BtnThrRight' },
+  { id: 'vert', label: 'Up thruster', key: 'click', code: 'BtnThrVert' },
+];
+
 // The six ways the vehicle can be driven, as on-screen buttons and level bars. Left / Right turn the
 // ROV (it has no sideways thruster). Every pad button presses the key of the same name.
 export const PAD_BUTTONS = [
@@ -49,6 +62,21 @@ export function axesFromKeys(held) {
     if (held.has(code)) axes[axis] += dir;
   }
   return axes;
+}
+
+// +1 normally, -1 while the Reverse button is on: the direction a thruster button pushes its thruster.
+export function reverseSign(held) {
+  return held.has(REVERSE_CODE) ? -1 : 1;
+}
+
+// held: Set of codes -> {left, right, vert} in -1, 0, +1 (the thrusters whose button is held).
+export function thrustersFromButtons(held) {
+  const out = { left: 0, right: 0, vert: 0 };
+  const sign = reverseSign(held);
+  for (const [code, name] of Object.entries(THRUSTER_CODES)) {
+    if (held.has(code)) out[name] = sign;
+  }
+  return out;
 }
 
 // Input types where WASD must type text. A focused slider, checkbox, radio or
