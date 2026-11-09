@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  COLOR_CSS, DEFAULT_COLORS, MAX_COLORS, colorCss, defaultColors, exportColors, hueWidth, importColors,
-  inHueRange, inRange, loadColors, rangeFromSamples, rgbToHsv, sanitizeColors, saveColors, widenRange,
+  COLOR_CSS, DEFAULT_COLORS, MAX_COLORS, balanceRgb, calibrateBalanced, colorCss, defaultColors, exportColors,
+  gainsAt, hueWidth, importColors, inHueRange, inRange, loadColors, rangeFromSamples, rgbToHsv, sanitizeColors,
+  sanitizeGains, saveColors, widenRange,
 } from '../js/colors.js';
 
 // [r, g, b, h, s, v] from OpenCV 5.0 cv2.cvtColor(COLOR_BGR2HSV), each colour filling a 64-pixel row
@@ -87,9 +88,9 @@ test('rgbToHsv: out-of-range and junk input is clamped', () => {
 
 test('DEFAULT_COLORS are the protocol defaults (same numbers as host/vision/colors.py)', () => {
   assert.deepEqual(DEFAULT_COLORS, {
-    red: { h: [170, 10], s: [100, 255], v: [70, 255] },
-    yellow: { h: [18, 38], s: [100, 255], v: [100, 255] },
-    blue: { h: [100, 130], s: [150, 255], v: [50, 255] },
+    red: { h: [170, 8], s: [45, 255], v: [130, 255] },
+    yellow: { h: [18, 34], s: [70, 255], v: [80, 255] },
+    blue: { h: [95, 135], s: [20, 255], v: [40, 255] },
   });
   const copy = defaultColors();
   assert.deepEqual(copy, DEFAULT_COLORS);
@@ -115,15 +116,52 @@ test('inHueRange: plain and wrapped ranges', () => {
   assert.equal(hueWidth([170, 10]), 20);
 });
 
-test('inRange: the default ranges pick the right colour', () => {
+test('inRange: the default ranges pick the right colour (balanced picture: the water is grey 160)', () => {
   const which = (r, g, b) => Object.keys(DEFAULT_COLORS).filter((n) => inRange(rgbToHsv(r, g, b), DEFAULT_COLORS[n]));
   assert.deepEqual(which(220, 30, 30), ['red']);
   assert.deepEqual(which(220, 30, 60), ['red']); // hue ~176: wrapped part
+  assert.deepEqual(which(200, 120, 110), ['red']); // a far, pale red pole
   assert.deepEqual(which(240, 200, 40), ['yellow']);
   assert.deepEqual(which(20, 70, 220), ['blue']);
-  assert.deepEqual(which(90, 140, 175), []); // pool water: blue but not saturated enough
-  assert.deepEqual(which(128, 128, 128), []);
-  assert.deepEqual(which(40, 10, 10), []); // red in the dark: too dark
+  assert.deepEqual(which(140, 150, 175), ['blue']); // a far, pale blue pole: the water is grey now
+  assert.deepEqual(which(160, 160, 160), []); // the water
+  assert.deepEqual(which(240, 200, 175), []); // grey pipe up close: turns orange (H ~12), not red
+  assert.deepEqual(which(255, 250, 200), []); // white pipe up close: pale yellow, not yellow
+  assert.deepEqual(which(110, 70, 60), []); // black weight up close: too dark for red
+});
+
+test('gains: sanitizeGains, gainsAt (interpolated like OpenCV resize), balanceRgb', () => {
+  assert.equal(sanitizeGains(null), null);
+  assert.equal(sanitizeGains([]), null);
+  assert.equal(sanitizeGains([[1, 1]]), null);
+  assert.equal(sanitizeGains([[1, 1, NaN]]), null);
+  assert.equal(sanitizeGains([[1, 1, 0]]), null);
+  assert.equal(sanitizeGains([[1, 1, 11]]), null);
+  assert.equal(sanitizeGains(Array(257).fill([1, 1, 1])), null);
+  const g = sanitizeGains([[1, 1, 2], [1, 2, 4]]);
+  assert.deepEqual(g, [[1, 1, 2], [1, 2, 4]]);
+  assert.deepEqual(gainsAt(g, 0), [1, 1, 2]);       // above the first row centre: first row
+  assert.deepEqual(gainsAt(g, 0.25), [1, 1, 2]);    // row 0 centre
+  assert.deepEqual(gainsAt(g, 0.5), [1, 1.5, 3]);   // halfway between the centres
+  assert.deepEqual(gainsAt(g, 1), [1, 2, 4]);
+  assert.deepEqual(balanceRgb(100, 100, 100, [0.5, 1, 2]), [200, 100, 50]); // gains are B, G, R
+  assert.deepEqual(balanceRgb(200, 10, 10, [1, 1, 2]), [255, 10, 10]);       // clipped
+});
+
+test('calibrateBalanced: widens the default just enough, never narrower; unknown names from the samples', () => {
+  const inside = spread([2, 180, 220]);
+  assert.deepEqual(calibrateBalanced('red', inside), DEFAULT_COLORS.red); // already covered: unchanged
+  const orange = calibrateBalanced('red', spread([12, 200, 230]));         // orange-red paint
+  assert.ok(inHueRange(12, orange.h) && inHueRange(175, orange.h) && inHueRange(0, orange.h), String(orange.h));
+  assert.equal(orange.h[1], 15);
+  const pale = calibrateBalanced('blue', spread([115, 22, 150]));
+  assert.equal(pale.s[0], 20);                     // never above the default floor
+  const dim = calibrateBalanced('red', spread([3, 150, 140]));
+  assert.ok(dim.v[0] <= 130 && dim.v[0] >= 80, String(dim.v));
+  const green = calibrateBalanced('green', spread([60, 120, 200]));
+  assert.deepEqual(green.h, [57, 63]);
+  assert.equal(calibrateBalanced('red', []), null);
+  assert.equal(calibrateBalanced('red', [[1, 2]]), null);
 });
 
 const spread = (base, n = 81) => Array.from({ length: n }, (_, i) => [base[0], base[1], base[2]]
@@ -226,10 +264,11 @@ test('persistence: round trip, junk, blocked storage', () => {
   const st = fakeStorage();
   const cal = { ...defaultColors(), red: { h: [168, 6], s: [80, 255], v: [50, 255] } };
   assert.equal(saveColors(st, cal), true);
-  assert.ok(st.data['rov.colors.v1']);
+  assert.ok(st.data['rov.colors.v2']);
+  assert.deepEqual(loadColors(fakeStorage({ 'rov.colors.v1': st.data['rov.colors.v2'] })), DEFAULT_COLORS); // old raw ranges are not used
   assert.deepEqual(loadColors(st), cal);
   assert.deepEqual(loadColors(fakeStorage()), DEFAULT_COLORS);
-  assert.deepEqual(loadColors(fakeStorage({ 'rov.colors.v1': '{bad' })), DEFAULT_COLORS);
+  assert.deepEqual(loadColors(fakeStorage({ 'rov.colors.v2': '{bad' })), DEFAULT_COLORS);
   assert.deepEqual(loadColors(null), DEFAULT_COLORS);
   const blocked = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
   assert.deepEqual(loadColors(blocked), DEFAULT_COLORS);
@@ -254,4 +293,10 @@ test('export / import', () => {
   assert.equal(importColors('{"colors": [{"h": [1, 2], "s": [1, 2], "v": [1, 2]}]}').ok, false);
   assert.equal(importColors('null').ok, false);
   assert.equal(importColors(undefined).ok, false);
+  // a file from before the water-colour balance holds raw-camera ranges: refused
+  r = importColors(JSON.stringify({ format: 'rov-colors', version: 1, colors: defaultColors() }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /version 1/);
+  assert.match(text, /"version": 2/);
+  assert.match(text, /"space": "balanced"/);
 });

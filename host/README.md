@@ -82,11 +82,16 @@ every level.
 
 ### Drive mode (Drive panel)
 
-- **Throttle: levels stay** (default). `W/S`, `A/D` and `R/F` each move a *level* for their axis
-  gradually while the key is held (2 s from 0 to full, a short tap changes it a few percent, `config.js`
-  `driveMode.ratePerSec`). **The level stays when you release the key**, like a throttle lever: raise it
-  with `W`, lower it with `S` (through zero into reverse). The pad shows the levels, and the thruster bars
-  (Diagnostics) show the real pulses (full level = MAX throttle, e.g. 1500 to 1575 us at 0.5).
+- **Throttle: levels stay** (default). Power is a **level**, not a percentage: 7 levels each way
+  (`config.js` `driveMode.levels`). `W/S`, `A/D` and `R/F` each move the level of their axis: **one press
+  = one level up**, the opposite key = one level down (through 0 into reverse); a key held down repeats
+  after 0.5 s, 3 steps per second. **The level stays when you release the key**, like a throttle lever.
+  The pad shows `level/7`, and the thruster bars (Diagnostics) show the real pulses (level 7 = full =
+  MAX throttle, e.g. 1500 to 1575 us at 0.5; level 1 = one seventh of that).
+  The **Left / Right / Up thruster** buttons under the pad drive one thruster alone, on top of the six
+  directions. **Buttons only** (mouse or touch): no keyboard key can drive a single thruster. The
+  **Reverse** toggle makes them push backwards; in Throttle mode each click steps that thruster's own
+  level the same way.
   `Space` or `Esc` zero everything at once. The levels are also reset by DISARM, losing the window focus,
   hiding the tab, and entering a text field, so the robot never keeps driving unattended.
 - **Hold: only while pressed.** The old behaviour: an axis is at full MAX only while its key is held.
@@ -361,17 +366,28 @@ band, `NEXT: BLUE` with an approach hint (`SEARCH: turn slowly`, `YAW LEFT/RIGHT
 - After each drop press **Ball dropped ✓**. **Undo** takes back the last one, **Reset** clears
   the drops and keeps the order.
 
-**Colour calibration in the pool (do it in the adjustment period, every time):**
+**How the colours are judged.** Water eats red light first, so in the raw camera picture a red pole
+turns brown, then magenta, then blue-grey as you back off. The detector therefore first **balances
+the picture against the water** (each row's water colour becomes neutral grey) and only then looks for
+red, yellow and blue. The default ranges are made for that balanced picture and were chosen on 144
+simulated pool conditions (`python -m tools.colors_bench`, `docs/MISSION5_COLOURS_UNDERWATER.md`):
+with them every pole is recognised out to 2 m in every condition, out to 3 m unless the water is
+cloudy, and a pole is never reported as another colour.
 
-1. Open **Colour calibration**, pick the colour, press **Sample: click the pole**, click on
-   the pole in the video (in the water, at a typical distance).
-2. **Shift+click** another spot (lit side, shadow side) to widen the range.
-3. Tick **Show mask**: only the pole should light up. If the water lights up too, raise
-   **S lo** (and **V lo**); the GUI already raises them when the first range also matches the
-   background, and warns when it could not.
-4. Repeat for all three colours. **Reset colour** returns to the default (air values).
-5. **Export** saves `rov_colors.json`; **Import** loads it on another laptop or after
-   clearing the browser. Ranges are remembered in this browser.
+**Colour check in the pool (adjustment period, every time):**
+
+1. Look at the video with all three poles in view at 1, 2 and 3 m: each must get its own box.
+   **Show mask** for a colour: only that pole should light up.
+2. Only if a pole is NOT found (paint very different from ours): open **Colour calibration**, pick
+   the colour, press **Sample: click the pole** and click on the pole in the video (the 5 Poles tab
+   must be showing results: the click uses the detector's balance). The range is **widened** just
+   enough to take that pole in; it never gets narrower than the default. **Shift+click** another
+   spot (shadow side) to widen more.
+3. Watch for grey, black or white objects close to the camera: after the balance they look warm and
+   may get a red or yellow box (known limit, ~9 % of worst-case frames in the simulator). The NEXT
+   target is the biggest tall blob of the colour, so check the box is on the pole.
+4. **Reset colour** returns to the default. **Export** saves `rov_colors.json` (version 2: balanced
+   ranges; files from before the balance are refused); **Import** loads it on another laptop.
 
 ### What is remembered
 
@@ -390,7 +406,10 @@ python tests/firmware/run.py                       # firmware parser + Mission 1
 ```
 
 Vision tests use synthetic frames only (no camera): `tests/vision_synth.py` draws tags 17 / 245 /
-503, a line with tapes and coloured poles in fake pool water.
+503, a line with tapes and coloured poles in fake pool water; `tests/underwater_sim.py` renders the
+poles physically (water absorption by wavelength, backscatter, lamp colour, camera white balance).
+`python -m tools.colors_bench` runs the full Mission 5 sweep (144 pool conditions × 7 distances, about
+2 minutes) and prints how often each pole is picked right.
 
 | File | Checks |
 |---|---|
@@ -398,6 +417,7 @@ Vision tests use synthetic frames only (no camera): `tests/vision_synth.py` draw
 | `tests/test_vision_tags.py` | ids, corner order, margin filter, pose distance, yaw sign |
 | `tests/test_vision_line.py` | angle, offset sign, tapes, no line → null, uneven light, tile joints |
 | `tests/test_vision_colors.py` | each colour, red hue wrap, area filter, mask |
+| `tests/test_vision_underwater.py` | Mission 5 on physics-based pool frames (`tests/underwater_sim.py`): poles right out to 3 m, never another colour, bad exposure / JPEG / noise, close-ups, grey pipes, the balance itself |
 | `tests/test_vision_process.py` | dispatch, bad messages, never raises |
 | `tests/test_vision_service.py` | real bridge + mock ESP32: hello, results, errors, ping, origin, oversized message, busy port, no OpenCV, `--no-vision`, driving stays responsive |
 | `webgui/tests/vision_proto.test.js` | frame packing, reply parsing |

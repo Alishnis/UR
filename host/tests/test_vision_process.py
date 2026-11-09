@@ -43,7 +43,7 @@ def test_constants():
 @pytest.mark.parametrize("mode, jpeg, size, fields", [
     ("tags", TAGS_JPEG, (1280, 720), {"tags", "weak"}),
     ("line", LINE_JPEG, (640, 360), {"refY", "line"}),
-    ("colors", POLES_JPEG, (640, 360), {"blobs"}),
+    ("colors", POLES_JPEG, (640, 360), {"blobs", "balance"}),
 ])
 def test_dispatch_and_reply_shape(mode, jpeg, size, fields):
     reply = process_message(message(mode, jpeg, frame_id=77))

@@ -380,30 +380,42 @@ line seen through pool water 110-200. In very murky water lower `darkThresh`.
 | `minAreaFrac` | 0.0008 | 0..0.5 | smallest blob, fraction of the frame area |
 | `maxBlobs` | 3 | 1..10 | blobs per colour |
 | `mask` | `null` | a name in `colors` | also return that colour's mask |
+| `balance` | `true` | bool | balance the picture against the water first (below); `false` = raw camera colours |
 
+- **Water-colour balance** (`balance`, on by default): the picture is shrunk to 64 × 36, each row's
+  median B, G, R is that row's water colour, and every row is scaled per channel so its water becomes
+  grey at level 160 (gains limited to 0.5..4, smoothed over 3 rows, stretched over the height). The
+  ranges are then applied to the balanced picture. Water absorbs red ~35× faster than blue, so
+  without this a red pole turns brown, magenta and blue-grey with distance; after it, red stays at
+  H 2..9 out to 3 m (tools/colors_bench.py, docs/MISSION5_COLOURS_UNDERWATER.md).
 - Ranges are OpenCV 8-bit HSV: H 0..179 (= hue° / 2), S and V 0..255. **H lo > hi wraps through
   0** (red `[170, 10]`). S and V pairs are put in order. Names: 1..16 characters `a-z 0-9 _ -`;
   invalid names are skipped. A malformed range of `red`, `yellow` or `blue` falls back to its
   default, of another name is dropped. Missing or empty `colors` = the defaults.
-- Defaults (air values, approximate: **calibrate in the pool**; same numbers as
+- Defaults, for the **balanced** picture (chosen on 144 simulated pool conditions; same numbers as
   `DEFAULT_COLORS` in `webgui/js/colors.js`):
 
 | Colour | H | S | V |
 |---|---|---|---|
-| `red` | 170..10 | 100..255 | 70..255 |
-| `yellow` | 18..38 | 100..255 | 100..255 |
-| `blue` | 100..130 | 150..255 | 50..255 (the pool is blue: blue needs high saturation) |
+| `red` | 170..8 | 45..255 | 130..255 (H stops at 8 and V at 130: grey / black things near the camera turn orange-red) |
+| `yellow` | 18..34 | 70..255 | 80..255 (S 70: white things near the camera turn pale yellow) |
+| `blue` | 95..135 | 20..255 | 40..255 (the water is grey now, so a pale far blue pole still counts) |
 
 Detection runs on a copy at most 640 px wide: 3×3 blur, HSV, range, open 3×3, close 5×5,
 connected components; coordinates are scaled back to the JPEG.
 
 ```json
 "blobs": [{"color": "red", "box": [x, y, w, h], "center": [x, y], "area": 5321.0,
-           "areaFrac": 0.005774, "aspect": 7.9, "fill": 0.84}]
+           "areaFrac": 0.005774, "aspect": 7.9, "fill": 0.84, "sat": 151.2, "widthFrac": 0.034}],
+"balance": [[gB, gG, gR], ...36 rows, top to bottom]
 ```
 
 - Sorted by `area`, biggest first. `box`: top-left corner, width, height. `area`: pixels in
   JPEG scale. `areaFrac`: of the frame. `aspect` = box h / w (a pole is tall: > 1).
-  `fill` = area / box area.
+  `fill` = area / box area. `sat`: mean saturation of the blob (balanced picture). `widthFrac`: box
+  width as a fraction of the frame width.
+- `balance` (only with `balance` on): the gains of each of the 36 rows, B, G, R. The GUI applies the
+  same gains to the pixels it reads for click-to-calibrate, interpolated over the height like
+  OpenCV's linear resize (row r covers the height around (r + 0.5) / 36).
 - `mask` (only when a valid name was asked for): `data:image/png;base64,...`, white = inside
   the range after the clean-up, at the work size (≤ 640 px wide).

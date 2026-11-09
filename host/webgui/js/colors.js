@@ -3,19 +3,26 @@
 //
 // HSV in the OpenCV 8-bit convention, like host/vision/colors.py: H 0..179 (hue degrees / 2),
 // S and V 0..255. A hue range with lo > hi wraps through 0 (red: [170, 10]).
-// The defaults are rough values for air: calibrate in the pool (click the pole in the GUI).
+//
+// The ranges are for the WATER-BALANCED picture: the detector first scales each channel so that the
+// water is grey (balance gains per picture row, sent back with every result), which keeps red red at
+// any distance instead of drifting to brown / magenta / blue. Click-to-calibrate applies the same gains
+// to the pixels it reads, so a calibration and the detector always see the same colours.
 
-const STORAGE_KEY = 'rov.colors.v1';
+const STORAGE_KEY = 'rov.colors.v2'; // v1 held ranges for the raw camera picture: not valid any more
 export const MAX_COLORS = 6;
 export const NAME_RE = /^[a-z0-9_-]{1,16}$/;
 
 // Keep equal to the defaults in host/vision/colors.py. Treat as read-only: defaultColors() gives an
 // editable copy.
 export const DEFAULT_COLORS = {
-  red: { h: [170, 10], s: [100, 255], v: [70, 255] },
-  yellow: { h: [18, 38], s: [100, 255], v: [100, 255] },
-  blue: { h: [100, 130], s: [150, 255], v: [50, 255] }, // the pool is blue too: high saturation only
+  red: { h: [170, 8], s: [45, 255], v: [130, 255] },
+  yellow: { h: [18, 34], s: [70, 255], v: [80, 255] },
+  blue: { h: [95, 135], s: [20, 255], v: [40, 255] },
 };
+// Why these numbers (host/vision/colors.py, tools/colors_bench.py): red poles stay at H 2..9 out to 3 m
+// after the balance, but grey / black / white things close to the camera turn orange (H 9..17), so red
+// stops at 8; yellow needs S >= 70 and red V >= 130 to keep pale-yellow white pipes and black weights out.
 
 // How each colour is drawn in the GUI (boxes, chips).
 export const COLOR_CSS = { red: '#ff4d4f', yellow: '#ffd43b', blue: '#4dabf7' };
@@ -47,6 +54,31 @@ export function rgbToHsv(r, g, b) {
   h = (h * HDIV[diff] + HALF) >> SHIFT;
   if (h < 0) h += 180;
   return [h, s, v];
+}
+
+// ---------- water-colour balance (the gains come from host/vision/colors.py balance_gains) ----------
+
+// Untrusted rows of [gB, gG, gR] -> a clean copy, or null.
+export function sanitizeGains(raw) {
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 256) return null;
+  const ok = raw.every((r) => Array.isArray(r) && r.length === 3 && r.every((g) => Number.isFinite(g) && g > 0 && g <= 10));
+  return ok ? raw.map((r) => [...r]) : null;
+}
+
+// The gains at a height yFrac (0 = top .. 1 = bottom), interpolated between rows the way the detector
+// stretches them over the picture (OpenCV resize, INTER_LINEAR). yFrac of a pixel row y: (y + 0.5) / height.
+export function gainsAt(gains, yFrac) {
+  const n = gains.length;
+  const pos = Math.min(n - 1, Math.max(0, yFrac * n - 0.5));
+  const i0 = Math.floor(pos);
+  const i1 = Math.min(n - 1, i0 + 1);
+  const t = pos - i0;
+  return [0, 1, 2].map((c) => gains[i0][c] * (1 - t) + gains[i1][c] * t);
+}
+
+// r, g, b of the camera picture -> the balanced r, g, b (gains in OpenCV's B, G, R order).
+export function balanceRgb(r, g, b, [gb, gg, gr]) {
+  return [byte(r * gr), byte(g * gg), byte(b * gb)];
 }
 
 export function inHueRange(h, [lo, hi]) {
@@ -105,6 +137,31 @@ export function rangeFromSamples(hsvList, opts = {}) {
     h: [wrapHue(Math.floor(lo)), wrapHue(Math.ceil(hi))],
     s: [byte(Math.max(o.minSat, sMed * o.satFrac)), 255],
     v: [byte(Math.max(o.minVal, vMed * o.valFrac)), 255],
+  };
+}
+
+// Click on a pole in the balanced picture: the DEFAULT range of that colour, widened only as far as
+// needed to take in the clicked pixels (median hue +-3, 85 % of their median saturation and brightness:
+// lower floors would let grey / black things near the camera in). Never narrower than the default: one click at one distance cannot know how much paler the
+// pole gets further away, and the defaults were chosen on a whole range of pools and distances.
+// Unknown colour names start from the samples alone. null for no valid samples.
+export function calibrateBalanced(name, hsvList, base = DEFAULT_COLORS[name]) {
+  const px = (Array.isArray(hsvList) ? hsvList : []).filter(isHsv);
+  if (!px.length) return null;
+  const hues = unwrapHues(px.map((p) => wrapHue(p[0])));
+  const mid = median(hues);
+  const sMed = median(px.map((p) => p[1]).sort((a, b) => a - b));
+  const vMed = median(px.map((p) => p[2]).sort((a, b) => a - b));
+  const pole = {
+    h: [wrapHue(Math.floor(mid - 3)), wrapHue(Math.ceil(mid + 3))],
+    s: [byte(Math.max(20, sMed * 0.85)), 255],
+    v: [byte(Math.max(25, vMed * 0.85)), 255],
+  };
+  if (!base) return pole;
+  return {
+    h: widenRange(base, pole).h,
+    s: [Math.min(base.s[0], pole.s[0]), 255],
+    v: [Math.min(base.v[0], pole.v[0]), 255],
   };
 }
 
@@ -174,7 +231,7 @@ export function saveColors(storage, cal) {
 }
 
 export function exportColors(cal) {
-  return JSON.stringify({ format: 'rov-colors', version: 1, colors: sanitizeColors(cal) }, null, 2) + '\n';
+  return JSON.stringify({ format: 'rov-colors', version: 2, space: 'balanced', colors: sanitizeColors(cal) }, null, 2) + '\n';
 }
 
 // Accepts what exportColors writes, or a bare {name: {h, s, v}} object.
@@ -186,6 +243,9 @@ export function importColors(text) {
     return { ok: false, error: `not a JSON file (${e.message})` };
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: 'expected a JSON object' };
+  if (raw.format === 'rov-colors' && raw.version === 1) {
+    return { ok: false, error: 'this file is from before the water-colour balance (version 1): calibrate again' };
+  }
   const map = raw.colors && typeof raw.colors === 'object' && !Array.isArray(raw.colors) ? raw.colors : raw;
   const valid = Object.entries(map).filter(([name, r]) => NAME_RE.test(name) && sanitizeRange(r));
   if (!valid.length) return { ok: false, error: 'no valid colour ranges in the file' };

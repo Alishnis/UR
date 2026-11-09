@@ -242,19 +242,28 @@ across the start baseline = 40 pts.
 4. After the ball drops, press **Ball dropped ✓** — the next colour in the order becomes the target.
 
 **Algorithms:**
+- **Water-colour balance first** (the answer to "red looks like another colour under water"):
+  water absorbs red light ~35× faster than blue and puts a blue-green veil in front of everything,
+  so in the raw camera picture a red pole turns brown → magenta → blue-grey as the distance grows.
+  The detector measures the water colour in every row of the picture (the median: the poles are thin,
+  most of each row is water) and scales B, G, R so the water becomes neutral grey. Measured on a
+  physics-based simulator (144 pool conditions): red stays red (hue 2–9) out to 3 m, and a pole is
+  never reported as another colour. Details and numbers: `docs/MISSION5_COLOURS_UNDERWATER.md`.
 - **HSV colour segmentation:** HSV separates colour (hue) from brightness, so it copes with changing
-  light better than RGB. Per colour: `inRange` on hue, saturation and value.
+  light better than RGB. Per colour: `inRange` on hue, saturation and value, on the balanced picture.
   - **Red wraps around hue 0/180** in OpenCV's 0–179 hue scale → two masks combined.
-  - **Blue on a blue pool:** needs a high minimum saturation; the shape check helps.
+  - **Red stops at hue 8 and needs V ≥ 130:** grey / black things close to the camera turn orange
+    after the balance (less blue water in front of them than the background); this keeps them out.
 - **Cleaning:** downscale to ≤ 640 px, 3×3 Gaussian blur, **morphological opening** (3×3, removes
   speckles) then **closing** (5×5, fills glare holes), **connected components** → blobs with box,
   area, aspect ratio (height/width) and fill ratio; tiny blobs dropped (< 0.08 % of the image).
 - **Pole choice:** per colour the best blob by area, preferring tall shapes (aspect ≥ 1.2) — a pole
   is tall and narrow.
-- **Click-to-calibrate:** reads a 9×9 pixel patch from the current frame, converts RGB → HSV with the
-  **same integer formula as OpenCV** (checked against a 191-colour OpenCV table), takes the
-  **circular median hue** (correct for red around 0/179) ± 10 and generous saturation/value minimums
-  (darker, shaded side of the pole still matches).
+- **Click-to-calibrate:** reads a 9×9 pixel patch from the current frame, applies the detector's
+  latest balance gains, converts RGB → HSV with the **same integer formula as OpenCV** (checked
+  against a 191-colour OpenCV table), and **widens the default range just enough** to include the
+  pole (circular median hue ± 3, 85 % of its saturation and brightness). It never narrows
+  the defaults: one click at one distance cannot know how much paler the pole gets further away.
 - **Approach hint:** horizontal offset of the target's centre → turn until within 8 % of centre;
   "close" when the pole's box fills ≥ 60 % of the image height.
 - **Order logic:** order parsing and validation (must be a permutation of R, Y, B), next target,

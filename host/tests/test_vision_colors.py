@@ -1,4 +1,9 @@
-"""Mode "colors": HSV blobs (Mission 5 poles) on pool-like synthetic frames."""
+"""Mode "colors": HSV blobs (Mission 5 poles) - the mechanics (hue wrap, areas, masks, parameters).
+
+These frames are painted with exact HSV colours, not rendered physically, so they run with the water
+balance OFF and the raw-camera ranges below. How well the real detector (balance on, DEFAULT_COLORS)
+sees the poles under water is tested in test_vision_underwater.py.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +15,19 @@ import pytest
 
 from vision.colors import DEFAULT_COLORS, MAX_COLORS, colors_params, detect_colors, sanitize_color
 from vision_synth import Pole, degrade, jpeg_roundtrip, poles_scene, water
+
+
+# raw camera HSV ranges (the detector's defaults before the water-colour balance)
+RAW_COLORS = {
+    "red": {"h": [170, 10], "s": [100, 255], "v": [70, 255]},
+    "yellow": {"h": [18, 38], "s": [100, 255], "v": [100, 255]},
+    "blue": {"h": [100, 130], "s": [150, 255], "v": [50, 255]},
+}
+
+
+def raw(**params) -> dict:
+    """Parameters for a painted (not physically rendered) frame: balance off, raw ranges."""
+    return {"balance": False, "colors": RAW_COLORS, **params}
 
 
 def by_color(blobs: list[dict]) -> dict[str, list[dict]]:
@@ -30,7 +48,7 @@ def hsv_patch(img: np.ndarray, x0: int, y0: int, x1: int, y1: int, hsv) -> None:
 def test_each_pole_found_once_where_it_is(size, murky):
     w, h = size
     img, poles = poles_scene(w, h, haze=0.3 if murky else 0.15, noise=7 if murky else 4, seed=3)
-    res = detect_colors(jpeg_roundtrip(img, 75), {})
+    res = detect_colors(jpeg_roundtrip(img, 75), raw())
     found = by_color(res["blobs"])
     assert sorted(found) == ["blue", "red", "yellow"]  # nothing else: the blue-green water is not "blue"
     s = w / 640  # tolerance grows with the frame size
@@ -49,9 +67,9 @@ def test_red_hue_wraps_through_zero():
     img = water(640, 360)
     hsv_patch(img, 200, 100, 230, 300, (175, 220, 200))  # one pole, two hues either side of 0
     hsv_patch(img, 230, 100, 260, 300, (3, 220, 200))
-    (blob,) = detect_colors(img, {})["blobs"]
+    (blob,) = detect_colors(img, raw())["blobs"]
     assert blob["color"] == "red" and blob["box"] == pytest.approx([200, 100, 60, 200], abs=1)
-    no_wrap = {"colors": {"red": {"h": [0, 10], "s": [100, 255], "v": [70, 255]}}}
+    no_wrap = raw(colors={"red": {"h": [0, 10], "s": [100, 255], "v": [70, 255]}})
     (half,) = detect_colors(img, no_wrap)["blobs"]
     assert half["box"] == pytest.approx([230, 100, 30, 200], abs=1)
 
@@ -60,7 +78,7 @@ def test_min_area_and_max_blobs():
     img = water(640, 360)
     for i, side in enumerate((40, 30, 20, 12, 6)):  # five yellow squares, biggest first
         hsv_patch(img, 30 + 120 * i, 150, 30 + 120 * i + side, 150 + side, (28, 220, 220))
-    yellow = {"colors": {"yellow": DEFAULT_COLORS["yellow"]}}
+    yellow = raw(colors={"yellow": RAW_COLORS["yellow"]})
     sizes = lambda res: [round(b["box"][2]) for b in res["blobs"]]  # noqa: E731
     assert sizes(detect_colors(img, {**yellow, "maxBlobs": 10, "minAreaFrac": 0})) == [40, 30, 20, 12, 6]
     assert sizes(detect_colors(img, {**yellow, "maxBlobs": 2})) == [40, 30]
@@ -76,12 +94,12 @@ def test_speckle_noise_is_not_a_blob():
     img = water(640, 360)
     ys, xs = rng.integers(0, 360, 400), rng.integers(0, 640, 400)
     img[ys, xs] = (20, 200, 230)  # isolated yellow pixels
-    assert detect_colors(degrade(img, noise=4), {"minAreaFrac": 0})["blobs"] == []
+    assert detect_colors(degrade(img, noise=4), raw(minAreaFrac=0))["blobs"] == []
 
 
 def test_mask_for_the_requested_colour():
     img, poles = poles_scene(1280, 720)
-    res = detect_colors(img, {"mask": "blue"})
+    res = detect_colors(img, raw(mask="blue"))
     png = base64.b64decode(res["mask"].split(",", 1)[1])
     mask = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
     assert mask.shape == (360, 640)  # work size: at most 640 wide
@@ -89,16 +107,16 @@ def test_mask_for_the_requested_colour():
     assert mask[int(blue.bottom / 2) - 20, int(blue.x / 2)] == 255
     red = next(p for p in poles if p.color == "red")
     assert mask[int(red.bottom / 2) - 20, int(red.x / 2)] == 0
-    assert "mask" not in detect_colors(img, {})
-    assert "mask" not in detect_colors(img, {"mask": "green"})  # not one of the colours
-    assert "mask" not in detect_colors(img, {"mask": 3})
+    assert "mask" not in detect_colors(img, raw())
+    assert "mask" not in detect_colors(img, raw(mask="green"))  # not one of the colours
+    assert "mask" not in detect_colors(img, raw(mask=3))
 
 
 def test_custom_colours_replace_the_defaults():
     img, _ = poles_scene()
     hsv_patch(img, 300, 40, 340, 120, (60, 200, 200))  # a green object
     green = {"h": [50, 70], "s": [100, 255], "v": [60, 255]}
-    res = detect_colors(img, {"colors": {"green": green}})
+    res = detect_colors(img, raw(colors={"green": green}))
     assert [b["color"] for b in res["blobs"]] == ["green"]
     assert res["blobs"][0]["box"] == pytest.approx([300, 40, 40, 80], abs=1)
 
@@ -133,6 +151,6 @@ def test_defaults_are_not_changed_by_a_call():
 def test_pole_partly_out_of_the_frame_and_far_small_pole():
     poles = [Pole("red", 8, 40, 300, 30), Pole("yellow", 500, 200, 240, 6)]  # cut by the left edge; far
     img, _ = poles_scene(640, 360, poles)
-    found = by_color(detect_colors(jpeg_roundtrip(img, 80), {"minAreaFrac": 0.0002})["blobs"])
+    found = by_color(detect_colors(jpeg_roundtrip(img, 80), raw(minAreaFrac=0.0002))["blobs"])
     assert found["red"][0]["box"][0] == pytest.approx(0, abs=1)
     assert found["yellow"][0]["aspect"] > 4

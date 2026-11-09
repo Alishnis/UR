@@ -19,7 +19,7 @@ export const SPEED = { surge: 0.35, yawDeg: 45, heave: 0.25, tau: 0.4 }; // full
 export const PALETTE = {
   waterTop: '#5b8fae', waterDeep: '#35596b', floor: '#78aac8', grout: '#6b98b3', wall: '#8fa3ad',
   pipe: '#e8ecef', plate: '#f4f4f4', line: '#161616', tape: '#f2f2f2', ball: '#f4f4f4', poleBase: '#3a3f44',
-  red: '#d0312d', yellow: '#f2c230', blue: '#1d4fd8', object: '#8a9096', handle: '#121212',
+  red: '#d0312d', yellow: '#eed43a', blue: '#1d4fd8', object: '#8a9096', handle: '#121212',
 };
 
 // ---------- AprilTags (tag36h11, 16.2 cm black square) ----------

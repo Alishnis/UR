@@ -9,8 +9,8 @@
 import { confirmClick } from './confirm.js';
 import { CameraSource } from './camera.js';
 import {
-  colorCss, defaultColors, exportColors, importColors, inRange, loadColors, rangeFromSamples, rgbToHsv, saveColors,
-  widenRange,
+  balanceRgb, calibrateBalanced, colorCss, defaultColors, exportColors, gainsAt, importColors, inRange, loadColors,
+  rgbToHsv, saveColors, widenRange,
 } from './colors.js';
 import { CONFIG } from './config.js';
 import { isTypingTarget } from './controls.js';
@@ -146,6 +146,7 @@ const S = {
   tab: 'drive',
   m21: null, m3: null, m4: null, m5: null, colors: null, attempt: null,
   last: null,          // {msg, tab, capturedAt, at}: last result for the active tab
+  balance: null,       // {gains, at}: the detector's water-colour balance (5 Poles), for click-to-calibrate
   steer: null,         // steerView() of the last line result
   lastSide: null,      // where the line was last seen (LINE LOST hint)
   mask: null,          // {capturedAt, tab}: maskCanvas holds the picture
@@ -672,7 +673,7 @@ function paramsFor(tab) {
       return { darkThresh: prefs.darkThresh, refRow: C.m3.refRow, mask: prefs.lineMask };
     case 'm5':
       return {
-        colors: S.colors, minAreaFrac: C.m5.minAreaFrac, maxBlobs: 3,
+        colors: S.colors, minAreaFrac: C.m5.minAreaFrac, maxBlobs: 3, balance: true,
         mask: prefs.colorMask && Object.hasOwn(S.colors, prefs.colorSel) ? prefs.colorSel : null,
       };
     default:
@@ -731,6 +732,7 @@ function onResult(msg, meta) {
   const now = performance.now();
   S.last = { msg, tab: meta.tab, capturedAt: meta.capturedAt, at: now };
   S.error = null;
+  if (msg.mode === 'colors' && msg.balance) S.balance = { gains: msg.balance, at: now };
   if (msg.mask) setMask(msg.mask, meta);
 
   if (meta.tab === 'm21') {
@@ -1371,15 +1373,24 @@ function fillSliders() {
   el.m5Swatch.title = `H ${r.h[0]}..${r.h[1]}  S ${r.s[0]}..${r.s[1]}  V ${r.v[0]}..${r.v[1]}`;
 }
 
-// Pixels of the current frame as [h, s, v]: a w x h copy of the region (sx, sy, sw, sh).
-function frameHsv(sx, sy, sw, sh, w, h) {
+// Pixels of the current frame as [h, s, v]: a w x h copy of the region (sx, sy, sw, sh). With gains
+// (the detector's water-colour balance, rows of [gB, gG, gR]) the pixels are balanced first, each with
+// the gains of its height in the picture, exactly as the detector sees them.
+function frameHsv(sx, sy, sw, sh, w, h, gains = null) {
   if (sampleCanvas.width !== w) sampleCanvas.width = w;
   if (sampleCanvas.height !== h) sampleCanvas.height = h;
   const g = sampleCanvas.getContext('2d', { willReadFrequently: true });
   g.drawImage(el.video, sx, sy, sw, sh, 0, 0, w, h);
   const d = g.getImageData(0, 0, w, h).data;
+  const vh = el.video.videoHeight || 1;
   const out = [];
-  for (let i = 0; i < d.length; i += 4) out.push(rgbToHsv(d[i], d[i + 1], d[i + 2]));
+  let rowGains = null;
+  for (let i = 0; i < d.length; i += 4) {
+    const px = i / 4;
+    if (gains && px % w === 0) rowGains = gainsAt(gains, (sy + ((Math.floor(px / w) + 0.5) * sh) / h) / vh);
+    const rgb = rowGains ? balanceRgb(d[i], d[i + 1], d[i + 2], rowGains) : [d[i], d[i + 1], d[i + 2]];
+    out.push(rgbToHsv(...rgb));
+  }
   return out;
 }
 
@@ -1395,9 +1406,9 @@ const median = (xs) => {
 // then the whole picture is one big blob. Raise S lo, then V lo, until the background (the picture
 // minus a vertical band around the click) stops matching, but never above 90 % of what the pole
 // itself showed. -> {range, cover (fraction of the background still matching), raised}
-function tightenAgainstBackground(range, samples, clickU) {
+function tightenAgainstBackground(range, samples, clickU, gains) {
   const bg = [];
-  frameHsv(0, 0, el.video.videoWidth, el.video.videoHeight, BG_W, BG_H).forEach((px, i) => {
+  frameHsv(0, 0, el.video.videoWidth, el.video.videoHeight, BG_W, BG_H, gains).forEach((px, i) => {
     if (Math.abs((i % BG_W) / BG_W - clickU) > BG_BAND) bg.push(px);
   });
   const cover = (r) => (bg.length ? bg.reduce((n, px) => n + (inRange(px, r) ? 1 : 0), 0) / bg.length : 0);
@@ -1409,21 +1420,30 @@ function tightenAgainstBackground(range, samples, clickU) {
   return { range: r, cover: cover(r), raised: r.s[0] !== s0 || r.v[0] !== v0 };
 }
 
-// Click on the pole: 9 x 9 pixels of the raw frame -> a new range (Shift: widen the current one),
-// then checked against the background.
+const BALANCE_MAX_AGE_MS = 3000;
+
+// Click on the pole: 9 x 9 pixels of the frame, balanced with the detector's latest water-colour gains
+// -> the default range widened just enough to include them (Shift: widen the current range instead),
+// then checked against the background. Needs a fresh 5 Poles result for the gains.
 function sampleColor(p, widen) {
   const v = el.video;
   const name = prefs.colorSel;
   if (!v.videoWidth || !S.colors[name]) return;
+  const bal = S.balance;
+  if (!bal || performance.now() - bal.at > BALANCE_MAX_AGE_MS) {
+    env.notify('Wait for the detector: click a pole while the 5 Poles tab shows results '
+      + '(the colours are measured after the water-colour balance)', 'warn');
+    return;
+  }
   let hsv, next, check;
   try {
     const x = clamp(Math.round(p[0] * v.videoWidth) - 4, 0, Math.max(0, v.videoWidth - 9));
     const y = clamp(Math.round(p[1] * v.videoHeight) - 4, 0, Math.max(0, v.videoHeight - 9));
-    hsv = frameHsv(x, y, 9, 9, 9, 9);
-    const r = rangeFromSamples(hsv);
+    hsv = frameHsv(x, y, 9, 9, 9, 9, bal.gains);
+    const r = calibrateBalanced(name, hsv);
     if (!r) return;
     next = widen ? widenRange(S.colors[name], r) : r;
-    check = tightenAgainstBackground(next, hsv, p[0]);
+    check = tightenAgainstBackground(next, hsv, p[0], bal.gains);
   } catch (e) {
     env.notify(`Cannot read the picture: ${e.message}`, 'bad');
     return;

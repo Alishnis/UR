@@ -158,7 +158,7 @@ plate touching the box wall.
 ## 4. Software: control and safety
 
 **Q4.1 How does a key press become thruster motion?**
-The browser reads W/S, A/D and R/F. The mixer turns them into three values from −1 to 1 (left =
+The browser reads W/S, A/D and R/F (plus on-screen buttons for one thruster alone). The mixer turns them into three values from −1 to 1 (left =
 surge + yaw, right = surge − yaw, vertical = heave), applies the speed limit and ramp, and sends
 `D left right vert` to the bridge 20 times a second over WebSocket. The bridge forwards it over USB
 serial. The ESP32 checks the line, converts each value to a pulse width, clamps it, adds the trim
@@ -237,13 +237,29 @@ Steering is the line's offset from the centre plus its angle, and the GUI shows 
 "STRAIGHT".
 
 **Q5.8 How do you detect the pole colours?**
-Convert to HSV, because hue separates colour from brightness. Use a hue range per colour; red
-needs two ranges because it wraps around 0. Then clean the mask with morphology, find connected
-blobs, and prefer tall, narrow shapes. We calibrate by clicking on the pole in the pool video.
+First balance the picture against the water: in every row the median colour is the water, and each
+channel is scaled so the water becomes neutral grey. Then convert to HSV, because hue separates colour
+from brightness. Use a hue range per colour; red needs two ranges because it wraps around 0. Then
+clean the mask with morphology, find connected blobs, and prefer tall, narrow shapes. A click on the
+pole in the pool video can widen a range if our paint differs.
 
 **Q5.9 Why HSV and not RGB?**
 In RGB, a shadow changes all three numbers. In HSV mostly the "V" (brightness) changes, and the
 hue stays almost the same, so detection survives changing light underwater.
+
+**Q5.10 Red looks like another colour under water. Does your detector still find the red pole?**
+Yes, and we measured it. Water absorbs red ~35× faster than blue (0.34 /m vs 0.009 /m, Pope & Fry)
+and adds a blue-green haze, so in the raw picture our red pole went pink-brown at 1.5 m, magenta at
+3 m and blue-ish at 5 m. The water-colour balance removes exactly the colour the water added, so red
+stays at hue 2–9 out to 3 m. On a physics-based simulator (144 pool conditions × 7 distances) every
+pole was found out to 2 m, and no pole was ever called another colour (before: 192 mix-ups). Further
+away a pole may be missed, and then the pilot comes closer. Details: `docs/MISSION5_COLOURS_UNDERWATER.md`.
+
+**Q5.11 Any weakness left?**
+Grey, black or white things close to the camera look warm after the balance, so a grey pipe can
+look orange-red. Red stops at hue 8 and needs brightness ≥ 130, which keeps out most of them (9 % of
+worst-case frames left). The pilot checks the box on the video. We verify the masks in the pool
+during the adjustment period.
 
 ---
 

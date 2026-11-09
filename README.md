@@ -139,7 +139,7 @@ Build without uploading: `pio run`. Firmware constants (pins, limits, trim) are 
 
 | Key | Action |
 |---|---|
-| `W` / `S` | forward / back: raises / lowers the level gradually, **the level stays** after release |
+| `W` / `S` | forward / back: each press = one power level up / down (7 levels), **the level stays** after release |
 | `A` / `D` | yaw left / right (same) |
 | `R` / `F` | up / down (same) |
 | `J` / `K` | lower / raise magnitude |
@@ -148,11 +148,12 @@ Build without uploading: `pio run`. Firmware constants (pins, limits, trim) are 
 
 The Drive panel also has an **on-screen pad with the same six directions** (Forward, Back, Left,
 Right, Up, Down; Left / Right turn the ROV). Press and hold a button like its key; it shows the level
-as a gauge. Per-thruster bars, thruster and pin tests, self-check and calibration are in the collapsed
+as a gauge with its level (e.g. `3/7`). Below it, **Left / Right / Up thruster** buttons drive one
+thruster alone (buttons only, no keyboard key; the **Reverse** toggle makes them push backwards). Per-thruster bars, thruster and pin tests, self-check and calibration are in the collapsed
 **Diagnostics** section.
 
-This is the default **Throttle mode** (Drive panel > Drive mode): like a throttle lever, a key moves the
-level and it stays. Choose **Hold** there for the old behaviour (full only while the key is pressed).
+This is the default **Throttle mode** (Drive panel > Drive mode): like a throttle lever, a key press moves
+the level one step (of 7) and it stays. Choose **Hold** there for the old behaviour (full only while the key is pressed).
 Levels are reset by Space, Esc, DISARM, losing window focus and hiding the tab.
 
 Useful bridge options: `--mock` (fake ESP32), `-v` (verbose), `--no-vision` (no camera service),
@@ -162,8 +163,9 @@ Useful bridge options: `--mock` (fake ESP32), `-v` (verbose), `--no-vision` (no 
 
 In the **Camera** panel choose the USB camera and press **Start**, then pick the mission tab:
 `2.1 Tags`, `2.2 Dock`, `3 Line`, `4 Hook`, `5 Poles`. On the `Drive` tab set the camera's horizontal
-field of view and tick **Underwater** (water narrows the view by about 1.33). In the pool, calibrate
-the pole colours once by clicking each pole in the picture. All tabs are explained in
+field of view and tick **Underwater** (water narrows the view by about 1.33). Pole colours are judged
+after a water-colour balance, so the defaults should work in the pool. Check that each pole gets its
+own box at 1–3 m, and calibrate (click the pole) only if one is missed. All tabs are explained in
 `host/README.md` ("Camera and missions 2-5"). The **Test scene (simulator)** source lets you
 practise every mission on land.
 
@@ -211,6 +213,9 @@ python tests/firmware/run.py
 
 # Firmware build for the real chip (project root)
 pio run
+
+# Mission 5 colours: the full underwater sweep, 144 pool conditions (from host/, ~2 min)
+python -m tools.colors_bench
 ```
 
 The firmware parser is also compared with its Python twin on 20,000 random lines, so the fake
@@ -243,5 +248,6 @@ ESP32 and the real firmware cannot drift apart. On Windows the C++ tests need Mi
 | `docs/ARCHITECTURE.md`, `docs/diagrams/` | block diagrams and the Electrical and Coding flow chart |
 | `docs/HARDWARE_QUESTIONS.md` | open hardware facts and how to measure them |
 | `docs/MISSIONS_EXPLAINED.md` | how each mission works and which algorithms and libraries it uses |
+| `docs/MISSION5_COLOURS_UNDERWATER.md` | why red changes colour under water, how the detector copes, measured results, pool test plan |
 | `docs/study/` | presentation preparation: study notes, judge Q&A, electronics explained (partly in Russian) |
 | `docs/screenshots/` | vision modes running on the built-in test scene |

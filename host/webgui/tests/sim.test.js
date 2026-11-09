@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DEFAULT_COLORS, inRange, rgbToHsv } from '../js/colors.js';
+import { DEFAULT_COLORS, balanceRgb, inRange, rgbToHsv } from '../js/colors.js';
 import {
   DOCK, HOOK, LINE, PALETTE, POLE, POLES, POOL, ROV, SCENES, SIM_SCENES, SPEED, TAG_IDS, TAG_PATTERNS, TAG_SIZE_M,
   TAG_WALL, projectPoint, projectPolygon, simCamera, simInitial, simStep, tagPoint, toCamera,
@@ -234,15 +234,25 @@ test('line: tapes at the start and every 50 cm, all on the line', () => {
 });
 
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const detectedAs = (hex) => Object.keys(DEFAULT_COLORS).filter((n) => inRange(rgbToHsv(...rgb(hex)), DEFAULT_COLORS[n]));
 
-test('palette: each pole is found as its own colour, nothing else is found at all', () => {
+// The detector balances the picture against the water first (water -> grey 160): check the palette the
+// way it will see it, against each background a pole is seen on.
+const balancedAs = (hex, refHex) => {
+  const w = rgb(refHex);
+  const gains = [160 / w[2], 160 / w[1], 160 / w[0]].map((g) => Math.min(4, Math.max(0.5, g)));
+  const hsv = rgbToHsv(...balanceRgb(...rgb(hex), gains));
+  return Object.keys(DEFAULT_COLORS).filter((n) => inRange(hsv, DEFAULT_COLORS[n]));
+};
+
+test('palette: each pole is found as its own colour, the water and floor as nothing', () => {
   assert.deepEqual(POLES.map((p) => p.color).sort(), ['blue', 'red', 'yellow']);
-  for (const p of POLES) assert.deepEqual(detectedAs(PALETTE[p.color]), [p.color], p.color);
-  for (const [name, hex] of Object.entries(PALETTE)) {
-    if (['red', 'yellow', 'blue'].includes(name)) continue;
-    assert.deepEqual(detectedAs(hex), [], name);
-    // water and floor keep a safety margin under the blue saturation limit (noise, shading)
-    if (['waterTop', 'waterDeep', 'floor', 'grout'].includes(name)) assert.ok(rgbToHsv(...rgb(hex))[1] <= 130, name);
+  // the water colour the detector actually measured on a practice-scene frame (#6f9fbb)
+  for (const ref of ['waterTop', 'waterDeep', 'floor', '#6f9fbb']) {
+    const refHex = PALETTE[ref] ?? ref;
+    for (const p of POLES) assert.deepEqual(balancedAs(PALETTE[p.color], refHex), [p.color], `${p.color} on ${ref}`);
+    for (const name of ['waterTop', 'waterDeep', 'floor', 'grout']) {
+      if (name !== ref) continue;
+      assert.deepEqual(balancedAs(PALETTE[name], refHex), [], `${name} on ${ref}`);
+    }
   }
 });

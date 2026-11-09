@@ -4,6 +4,8 @@
 //   uint32 big-endian N | N bytes of UTF-8 JSON header | JPEG bytes
 // Bridge -> browser: text JSON (hello / result / error / pong).
 
+import { sanitizeGains } from './colors.js';
+
 export const VISION_VERSION = 1;
 export const VISION_MODES = ['tags', 'line', 'colors'];
 export const MAX_HEADER_BYTES = 4096;
@@ -65,7 +67,12 @@ export function parseVisionMessage(text) {
         out.tags = Array.isArray(msg.tags) ? msg.tags.filter(isObj) : [];
         out.weak = Array.isArray(msg.weak) ? msg.weak.filter(isObj) : []; // seen, not trusted: display only
       }
-      if (msg.mode === 'colors') out.blobs = Array.isArray(msg.blobs) ? msg.blobs.filter(isObj) : [];
+      if (msg.mode === 'colors') {
+        out.blobs = Array.isArray(msg.blobs) ? msg.blobs.filter(isObj) : [];
+        const gains = sanitizeGains(msg.balance);
+        if (gains) out.balance = gains;
+        else delete out.balance;
+      }
       if (msg.mode === 'line') {
         out.line = isObj(msg.line) ? { ...msg.line, tapes: Array.isArray(msg.line.tapes) ? msg.line.tapes : [] } : null;
       }
