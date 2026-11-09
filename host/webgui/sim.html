@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ROV flight simulator</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .simtop { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid #2a323d; }
+    .simtop h1 { font-size: 17px; margin: 0; }
+    .simtop a { color: var(--accent); }
+    .simgrid { display: grid; gap: 12px; padding: 12px; grid-template-columns: minmax(0, 1.55fr) minmax(330px, 1fr); }
+    .simgrid canvas { width: 100%; height: auto; display: block; border-radius: 8px; background: #0b2533; }
+    .viewbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; }
+    .viewbar .btn.on { border-color: var(--accent); color: var(--accent); }
+    .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .tele { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0; }
+    .tele div { background: #11161c; border-radius: 6px; padding: 6px 8px; }
+    .tele b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+    .tele span { font-size: 11px; color: var(--dim); }
+    .tele .warn b { color: var(--warn); } .tele .bad b { color: var(--bad); }
+    .report p { margin: 4px 0; font-size: 13px; line-height: 1.4; }
+    .report .ok { color: var(--ok); } .report .warn { color: var(--warn); } .report .bad { color: var(--bad); }
+    table.parts { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.parts th { text-align: left; color: var(--dim); font-weight: 600; padding: 2px; }
+    table.parts td { padding: 2px; }
+    table.parts input { width: 58px; background: #0f1419; color: var(--text); border: 1px solid #2a323d; border-radius: 4px; padding: 3px 4px; }
+    table.parts td:first-child { max-width: 150px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+    .row label { font-size: 13px; }
+    .row input[type=range] { width: 140px; }
+    @media (max-width: 1000px) { .simgrid { grid-template-columns: 1fr; } .twocol { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="simtop">
+    <h1>ROV flight simulator</h1>
+    <span class="chip ok">Simulator only: nothing is sent to the robot</span>
+    <span class="hint">Same keys and buttons as the real GUI. Click the page once so it gets the keyboard.</span>
+    <a href="index.html">Back to the control GUI</a>
+  </div>
+
+  <main class="simgrid">
+    <div>
+      <section class="panel">
+        <div class="viewbar">
+          <strong>Outside view</strong>
+          <button type="button" class="btn small view on" data-view="chase">Chase</button>
+          <button type="button" class="btn small view" data-view="side">Side (pitch)</button>
+          <button type="button" class="btn small view" data-view="behind">Behind (roll)</button>
+          <label class="hint"><input type="checkbox" id="show-forces" checked> forces</label>
+          <span class="hint">yellow = centre of mass, blue = centre of buoyancy</span>
+        </div>
+        <canvas id="view-out" width="1100" height="620"></canvas>
+      </section>
+      <div class="twocol" style="margin-top:12px">
+        <section class="panel">
+          <div class="viewbar">
+            <strong>ROV camera (20&deg; down)</strong>
+            <select id="scene" aria-label="Practice scene">
+              <option value="poles">Three poles (5)</option>
+              <option value="tags">Tag wall (2.1)</option>
+              <option value="dock">Docking frame (2.2)</option>
+              <option value="line">Line on the floor (3)</option>
+              <option value="hook">Object with handle (4)</option>
+            </select>
+          </div>
+          <canvas id="view-cam" width="640" height="360"></canvas>
+        </section>
+        <section class="panel">
+          <div class="viewbar"><strong>Attitude</strong><span class="hint">side: nose to the right &middot; behind: right side to the right</span></div>
+          <canvas id="view-att" width="640" height="300"></canvas>
+        </section>
+      </div>
+    </div>
+
+    <div>
+      <section class="panel">
+        <div class="viewbar">
+          <strong>Drive</strong>
+          <select id="drive-mode" aria-label="Drive mode">
+            <option value="latch">Throttle: levels stay</option>
+            <option value="hold">Hold: only while pressed</option>
+          </select>
+          <button type="button" class="btn small" id="btn-reset">Reset position</button>
+        </div>
+        <div class="row">
+          <label for="max">MAX</label><input type="range" id="max" min="0.05" max="0.30" step="0.01">
+          <span id="max-val" class="hint"></span>
+        </div>
+        <div class="dirpad" id="dirpad" role="group" aria-label="Direction control"></div>
+        <div class="thrpad" id="thrpad" role="group" aria-label="Single thruster control"></div>
+        <div class="padrow">
+          <button type="button" id="btn-reverse" class="btn small" aria-pressed="false">Reverse</button>
+          <button type="button" id="btn-zero" class="btn small">Zero all <small>Space</small></button>
+          <span class="hint">W/S forward/back, A/D turn, R/F up/down, J/K magnitude, Esc stop</span>
+        </div>
+        <div class="tele" id="tele"></div>
+      </section>
+
+      <section class="panel report" style="margin-top:12px">
+        <div class="viewbar"><strong>Balance (from the parts below)</strong></div>
+        <div id="report"></div>
+      </section>
+
+      <section class="panel" style="margin-top:12px">
+        <div class="viewbar">
+          <strong>Parts</strong>
+          <button type="button" class="btn small" id="btn-neutral">Ballast: +40 g, level</button>
+          <button type="button" class="btn small" id="btn-defaults">Defaults</button>
+        </div>
+        <p class="hint">Body axes: x right, y forward, z up, 0 = centre of the frame (cm). Volume = water the part
+          pushes away (mL): a sealed box counts its whole outside size. Measure and type your real numbers.</p>
+        <table class="parts"><thead><tr><th>Part</th><th>g</th><th>mL</th><th>x</th><th>y</th><th>z</th></tr></thead>
+          <tbody id="parts"></tbody></table>
+        <div class="row">
+          <label>Box outside size W&times;L&times;H cm</label>
+          <input type="number" id="box-w" style="width:52px"> <input type="number" id="box-l" style="width:52px">
+          <input type="number" id="box-h" style="width:52px">
+          <button type="button" class="btn small" id="btn-box-vol">Use as box volume</button>
+        </div>
+        <div class="row">
+          <label for="thrust">Thrust at the limit</label><input type="range" id="thrust" min="1" max="12" step="0.5">
+          <span id="thrust-val" class="hint"></span>
+        </div>
+        <div class="row">
+          <label for="current">Current / tether pull</label><input type="range" id="current" min="0" max="2" step="0.1">
+          <span id="current-val" class="hint"></span>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="js/flightsim.js"></script>
+</body>
+</html>

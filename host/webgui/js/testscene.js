@@ -387,12 +387,18 @@ export class TestScene {
     const cam = simCamera(this.state, {
       width: ctx.canvas.width, height: ctx.canvas.height, hfovDeg: Number(this.getHfov?.()) || 70,
     });
-    ctx.imageSmoothingEnabled = false;
-    drawWater(ctx, cam);
-    drawRays(ctx, cam, this.t);
-    drawFloor(ctx, cam);
-    drawHaze(ctx, cam);
-    PROPS[this.state.scene]?.(ctx, cam);
-    drawSensor(ctx, cam, this.noise);
+    drawPoolView(ctx, cam, this.state.scene, this.t, this.noise);
   }
+}
+
+// The pool as a camera sees it, for any camera ({width, height, fx, fy, cx, cy, pos, right, down, fwd,
+// horizonY}): the flight simulator (sim.html) uses it with a camera that pitches and rolls.
+export function drawPoolView(ctx, cam, scene, t = 0, noise = null) {
+  ctx.imageSmoothingEnabled = false;
+  drawWater(ctx, cam);
+  drawRays(ctx, cam, t);
+  drawFloor(ctx, cam);
+  drawHaze(ctx, cam);
+  PROPS[scene]?.(ctx, cam);
+  drawSensor(ctx, cam, noise);
 }
