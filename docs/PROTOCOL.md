@@ -176,9 +176,9 @@ Rules:
 - **Per-ESC trim:** `NEUTRAL_TRIM_US` (`src/config.h`) is added to every pulse of that output,
   for an ESC whose real stop is not at 1500 µs. `T` keeps showing the untrimmed widths
   (1500 = stop); the `R` self-check shows and checks the real pulse on the pin.
-- **Hard clamp** to `NEUTRAL_US ± MAX_DELTA_US` (default ±150 µs → 1350..1650 µs), applied before the
-  trim: an ESC with trim −22 gets 1328..1628 µs on its pin.
-  So `D 1 -1 0` gives `T 1650 1350 1500`. The GUI cannot bypass it.
+- **Hard clamp** to `NEUTRAL_US ± MAX_DELTA_US` (default ±300 µs → 1200..1800 µs, 60 %; it was ±150 µs), applied before the
+  trim: an ESC with trim −22 gets 1178..1778 µs on its pin.
+  So `D 1 -1 0` gives `T 1800 1200 1500`. The GUI cannot bypass it.
 - **Boot:** outputs neutral immediately, held for `ARM_MS` = 4000 ms so the ESCs arm.
   All serial input during this time is dropped, including the rest of a line that was
   cut by the end of arming. Then the firmware prints `ROV ready, accepting commands`.
@@ -194,7 +194,7 @@ Rules:
 > D 0.100 -0.100 0.200
 < T 1550 1450 1600
 > D 1 -1 0
-< T 1650 1350 1500          (clamped)
+< T 1800 1200 1500          (clamped)
 > D 0.5 0.5
 < W ignored malformed line: "D 0.5 0.5"
   (no D for 500 ms)

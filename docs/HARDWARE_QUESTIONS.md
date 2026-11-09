@@ -4,7 +4,7 @@ Nothing below may be assumed. Each item has a named config value and a way to me
 Fill in the "Result" line when measured, with the date.
 
 Safety for every spin test: clamp the motor, keep a hand on the power-box e-stop,
-start from neutral, use the default low clamp (±150 µs).
+start from neutral, use a low MAX slider first (0.2 to 0.3 = ±100 to ±150 µs) even though the firmware clamp is now ±300 µs (60 %).
 
 ## Q1. Are the ESCs bidirectional?
 

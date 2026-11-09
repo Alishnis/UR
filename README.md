@@ -19,7 +19,7 @@ USB camera ─► Browser GUI ──WebSocket :8766──► vision service (Ope
 | **5** Pole colours | HSV colour detection, the referee's order, "NEXT: RED" hint |
 
 Safety is built in at every level: 4 s ESC arming at boot, the GUI sends Stop until ARM is pressed,
-the firmware clamps pulses to **1350 to 1650 µs**, a **500 ms watchdog** stops the thrusters if
+the firmware clamps pulses to **1200 to 1800 µs** (±300 µs = 60 %), a **500 ms watchdog** stops the thrusters if
 commands stop, and `Esc` is an instant E-STOP.
 
 ## Repository layout
@@ -139,7 +139,7 @@ Build without uploading: `pio run`. Firmware constants (pins, limits, trim) are 
 
 | Key | Action |
 |---|---|
-| `W` / `S` | forward / back: each press = one power level up / down (7 levels), **the level stays** after release |
+| `W` / `S` | forward / back: each press = one power level up / down (14 levels), **the level stays** after release |
 | `A` / `D` | yaw left / right (same) |
 | `R` / `F` | up / down (same) |
 | `J` / `K` | lower / raise magnitude |
@@ -153,7 +153,7 @@ thruster alone (buttons only, no keyboard key; the **Reverse** toggle makes them
 **Diagnostics** section.
 
 This is the default **Throttle mode** (Drive panel > Drive mode): like a throttle lever, a key press moves
-the level one step (of 7) and it stays. Choose **Hold** there for the old behaviour (full only while the key is pressed).
+the level one step (of 14) and it stays. Choose **Hold** there for the old behaviour (full only while the key is pressed).
 Levels are reset by Space, Esc, DISARM, losing window focus and hiding the tab.
 
 Useful bridge options: `--mock` (fake ESP32), `-v` (verbose), `--no-vision` (no camera service),
@@ -178,10 +178,15 @@ Open **http://localhost:8000/sim.html** (or the **Flight simulator** chip in the
 ROV with its real balance: each part's mass and displaced volume (PVC frame, box, three thrusters,
 cables, ballast), so it pitches and rolls like the real one, floats or sinks, and climbs when it is
 nose-up. Same keys and buttons as the GUI (W/S, A/D, R/F, levels, thruster buttons, Space, Esc). The
-outside view (chase / side / behind) shows the tilt; the ROV camera view is 20° down like ours. The
-**Balance** panel says whether it floats, how much ballast it needs and where, and how it tilts when
-you drive. **Type your measured masses and the box size** into Parts: the defaults are estimates.
-Nothing is sent to the robot.
+outside view (chase / side / behind) shows the tilt; the ROV camera view is 20° down like ours.
+
+**Trim** picks the ballast. It starts at **Almost neutral (90 % trimmed)**: the robot as it should be
+after weighting it in the pool. It hangs in the water, drifts up a few cm/s and leans ~3° nose up.
+**Down level 2** (F twice) keeps the depth or sinks slowly; level 1 is too weak (inside the motor dead band). **Perfect** is
++40 g and level; **No ballast** shows why the weights are needed. The panel below says whether it
+floats, how much ballast it needs and where, and how it tilts when you drive. **Type your measured
+masses and the box size** into Parts: the defaults are estimates, and the chosen trim re-weights the
+ballast for your numbers. Nothing is sent to the robot.
 
 ## 5. Mission 1: Wi-Fi pairing
 

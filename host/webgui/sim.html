@@ -85,7 +85,7 @@
           <button type="button" class="btn small" id="btn-reset">Reset position</button>
         </div>
         <div class="row">
-          <label for="max">MAX</label><input type="range" id="max" min="0.05" max="0.30" step="0.01">
+          <label for="max">MAX</label><input type="range" id="max" min="0.05" max="0.60" step="0.01">
           <span id="max-val" class="hint"></span>
         </div>
         <div class="dirpad" id="dirpad" role="group" aria-label="Direction control"></div>
@@ -99,7 +99,13 @@
       </section>
 
       <section class="panel report" style="margin-top:12px">
-        <div class="viewbar"><strong>Balance (from the parts below)</strong></div>
+        <div class="viewbar">
+          <strong>Trim</strong>
+          <select id="trim" aria-label="Ballast trim"></select>
+        </div>
+        <p class="hint">Start with "Almost neutral (90 % trimmed)": the robot as it should be after weighting it in the
+          pool. It hangs in the water, drifts up a few cm per second and leans a little nose up: Down level 2 (F twice)
+          keeps the depth (or sinks slowly); level 1 is inside the motor dead band and does almost nothing. There are 14 levels each way, up to 60 % of the ESC range. "No ballast" shows why the weights are needed.</p>
         <div id="report"></div>
       </section>
 

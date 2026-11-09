@@ -105,6 +105,11 @@ export class Controller {
     if (this.keys.has(code)) return;
     this.keys.add(code);
     this.holdAge.set(code, { age: 0, next: this.repeatDelay });
+    // Space = brake: a tap shorter than one tick (or a slow, throttled page) must still stop the motors.
+    if (code === KEY_ZERO && this.armed) {
+      this.zeroTap = true;
+      this.zeroLever();
+    }
     // Throttle mode: a press is one level step, at once (a tap shorter than one tick still counts).
     if (this.driveMode === 'latch' && this.armed && !this.test) this.stepLevel(code);
   }
@@ -158,7 +163,8 @@ export class Controller {
 
     let target;
     let immediateZero = false;
-    if (this.keys.has(KEY_ZERO)) {
+    if (this.keys.has(KEY_ZERO) || this.zeroTap) {
+      this.zeroTap = false;
       target = [0, 0, 0];
       immediateZero = true; // Space = brake: no ramp
       this.zeroLever();     // ... and the Throttle levels go to stop as well

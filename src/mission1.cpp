@@ -50,6 +50,18 @@ void radioOn() {
   WiFi.setTxPower((wifi_power_t)WIFI_TX_POWER_QDBM);  // transmit power from config.h
 }
 
+// Cancel everything the radio is doing and start it again from scratch. A join that failed (wrong password,
+// network out of reach) leaves the driver retrying in the background; while it does, esp_wifi_set_config()
+// (error 0x3006 ESP_ERR_WIFI_STATE) and esp_wifi_scan_start() both refuse, so the next try and every scan
+// failed until the board was rebooted. Switching the radio off and on clears that state.
+void resetRadio() {
+  WiFi.setAutoReconnect(false);  // stop the background retries first
+  WiFi.disconnect(false, false, 0);  // cancel a join in progress (does not wait)
+  WiFi.mode(WIFI_OFF);           // radio off: forgets the half-finished join
+  delay(100);                    // let the driver settle
+  radioOn();
+}
+
 // Abort a running scan and free its results.
 void stopScan() {
   esp_wifi_scan_stop();  // tell the Wi-Fi driver to stop scanning
@@ -166,16 +178,29 @@ void connect(const char* ssid, const char* password) {
     WiFi.onEvent(onDisconnect, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
     hooked = true;
   }
-  radioOn();                    // station mode, transmit power
-  WiFi.setAutoReconnect(true);  // if the link drops later, the driver rejoins by itself
+  const size_t pwLen = strlen(g_password);
   g_authFails = 0;              // fresh attempt: forget old key failures
-  // no password = open network; begin() blocks up to ~1 s while the radio starts
-  const wl_status_t started = WiFi.begin(g_ssid, g_password[0] ? g_password : nullptr);
   g_reportedNoSsid = false;     // may print "not found" once for this attempt
-  g_startMs = millis();         // timeout clock starts now
-  if (started == WL_CONNECT_FAILED) {                 // refused immediately (e.g. 1-7 char password)
+  if (pwLen > 0 && pwLen < 8) {  // WPA2 keys are 8-63 characters: the driver would refuse it
     g_state = WifiState::Failed;
     Serial.print("N wifi: failed to start joining (a WPA2 password needs 8-63 characters)\n");
+    afterBlockingGet();
+    return;
+  }
+  // Always start from a clean radio: an earlier failed join must not block this one.
+  resetRadio();                 // also leaves it in station mode with our transmit power
+  WiFi.setAutoReconnect(true);  // if the link drops later, the driver rejoins by itself
+  // no password = open network; begin() blocks up to ~1 s while the radio starts
+  wl_status_t started = WiFi.begin(g_ssid, g_password[0] ? g_password : nullptr);
+  if (started == WL_CONNECT_FAILED) {  // still refused: reset the radio once more and try again
+    resetRadio();
+    WiFi.setAutoReconnect(true);
+    started = WiFi.begin(g_ssid, g_password[0] ? g_password : nullptr);
+  }
+  g_startMs = millis();         // timeout clock starts now
+  if (started == WL_CONNECT_FAILED) {                 // refused twice
+    g_state = WifiState::Failed;
+    Serial.print("N wifi: failed to start joining (Wi-Fi radio would not start: press Connect again)\n");
   } else {
     g_state = WifiState::Connecting;                  // poll() takes it from here
     Serial.printf("N wifi: connecting to %s\n", g_ssid);
@@ -207,6 +232,19 @@ void scan() {
   WiFi.scanDelete();                 // forget any old result list
   // async: loop() keeps running (watchdog, telemetry); show_hidden: a hidden tower still shows up
   if (WiFi.scanNetworks(true, true) == WIFI_SCAN_FAILED) {
+    // A failed join can leave the driver "still connecting", which refuses scans: reset the radio, retry once.
+    if (g_state != WifiState::Connected) {
+      stopAllThrusters();
+      resetRadio();
+      afterBlockingGet();
+      WiFi.scanDelete();
+      if (WiFi.scanNetworks(true, true) != WIFI_SCAN_FAILED) {
+        g_scanning = true;
+        g_scanStartMs = millis();
+        Serial.print("N scan: started\n");
+        return;
+      }
+    }
     Serial.print("N scan: failed\n");
     return;
   }
@@ -238,6 +276,7 @@ void poll(uint32_t nowMs) {
   }
   if (s == WL_CONNECT_FAILED || g_authFails >= AUTH_FAILS_WRONG_PASSWORD) {  // key rejected
     Serial.print("N wifi: failed, wrong password?\n");
+    WiFi.setAutoReconnect(false);                 // no background retries: they block the next join and scans
     WiFi.disconnect();                            // stop retrying
     g_state = WifiState::Failed;
     return;
@@ -249,6 +288,7 @@ void poll(uint32_t nowMs) {
   if (elapsedMoreThan(nowMs, g_startMs, WIFI_CONNECT_TIMEOUT_MS)) {  // 15 s without success
     Serial.printf("N wifi: timeout after %lu s (%s): check SSID, password, 2.4 GHz network\n",
                   (unsigned long)(WIFI_CONNECT_TIMEOUT_MS / 1000), statusName(s));
+    WiFi.setAutoReconnect(false);
     WiFi.disconnect();
     g_state = WifiState::Failed;
   }

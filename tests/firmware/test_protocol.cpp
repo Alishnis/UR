@@ -118,30 +118,33 @@ static void testMission1Commands() {
 }
 
 static void testPulseMath() {
-  // Bidirectional defaults: 1500 +/- 150 us clamp.
+  // Bidirectional defaults: 1500 +/- 300 us clamp.
   static_assert(ESC_BIDIRECTIONAL, "tests below assume the bidirectional default");
-  static_assert(MAX_DELTA_US == 150, "tests below assume the 150 us default clamp");
+  static_assert(MAX_DELTA_US == 300, "tests below assume the 300 us default clamp");
   CHECK(proto::valueToUs(0.0f) == 1500);
   CHECK(proto::valueToUs(0.1f) == 1550);
   CHECK(proto::valueToUs(-0.1f) == 1450);
   CHECK(proto::valueToUs(0.3f) == 1650);
-  CHECK(proto::valueToUs(0.31f) == 1650);   // clamped
-  CHECK(proto::valueToUs(1.0f) == 1650);
-  CHECK(proto::valueToUs(-1.0f) == 1350);
+  CHECK(proto::valueToUs(0.6f) == 1800);
+  CHECK(proto::valueToUs(0.61f) == 1800);   // clamped
+  CHECK(proto::valueToUs(1.0f) == 1800);
+  CHECK(proto::valueToUs(-0.6f) == 1200);
+  CHECK(proto::valueToUs(-1.0f) == 1200);
   CHECK(proto::valueToUs(0.001f) == 1501);  // 0.5 us rounds away from zero
   CHECK(proto::valueToUs(-0.001f) == 1499);
   CHECK(proto::valueToUs(NAN) == 1500);
   CHECK(proto::valueToUs(5.0f) == 1500);    // invalid input -> neutral
 
-  CHECK(proto::clampUs(0) == 1350);
-  CHECK(proto::clampUs(99999) == 1650);
+  CHECK(proto::clampUs(0) == 1200);
+  CHECK(proto::clampUs(99999) == 1800);
 
   // 50 Hz, 14 bit: duty = us * 16384 / 20000
   CHECK(proto::usToDuty(1500) == 1229);
   CHECK(proto::usToDuty(1000) == 819);
   CHECK(proto::usToDuty(2000) == 1638);
-  CHECK(proto::usToDuty(1350) == 1106);
+  CHECK(proto::usToDuty(1200) == 983);
   CHECK(proto::usToDuty(1650) == 1352);
+  CHECK(proto::usToDuty(1800) == 1475);
   // Quantization error must stay far below the 10 us readback tolerance.
   for (int us = MIN_US; us <= MAX_US; us++) {
     double back = proto::usToDuty(us) * 20000.0 / 16384.0;

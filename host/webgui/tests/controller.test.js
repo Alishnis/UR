@@ -120,6 +120,30 @@ test('Space zeroes instantly, no ramp', () => {
   near(c.step(DT).slots[0], 0.075); // W still held: restarts through the ramp
 });
 
+test('Space: a tap shorter than one tick still brakes (Hold and Throttle)', () => {
+  const c = make();
+  c.arm();
+  c.keyDown('KeyW');
+  run(c, 0.5);
+  c.keyDown('Space');
+  c.keyUp('Space');                                    // released before the next step
+  assert.deepEqual(c.step(DT).slots, [0, 0, 0]);
+  near(c.step(DT).slots[0], 0.075);                    // W still held: ramps up again, as after a held Space
+  const l = latch();
+  l.arm();
+  for (let i = 0; i < 4; i++) press(l, 'KeyW');
+  run(l, 1);
+  press(l, 'Space');
+  assert.equal(l.step(DT).line, 'D 0.000 0.000 0.000');
+  near(l.lever.surge, 0);
+  assert.equal(run(l, 1).line, 'D 0.000 0.000 0.000');
+  const d = make();                                     // disarmed: a tap does nothing and is not remembered
+  press(d, 'Space');
+  d.arm();
+  d.keyDown('KeyW');
+  assert.ok(run(d, 0.5).slots[0] > 0);
+});
+
 test('E-STOP: disarmed, zero, keys cleared, next line is S', () => {
   const c = make();
   c.arm();

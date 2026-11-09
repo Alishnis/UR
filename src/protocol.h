@@ -181,7 +181,7 @@ inline Command parseLine(const char* line) {
   return cmd;
 }
 
-// Keep a pulse width inside the hard clamp MIN_US..MAX_US (1350..1650 us).
+// Keep a pulse width inside the hard clamp MIN_US..MAX_US (1200..1800 us).
 inline int clampUs(long us) {
   if (us < MIN_US) return MIN_US;
   if (us > MAX_US) return MAX_US;

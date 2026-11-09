@@ -80,7 +80,7 @@ def test_drive_clamp_and_order(rig):
     send(mock, "D 0.1 -0.1 0.2")
     assert mock.us == [1550, 1450, 1600]
     send(mock, "D 1 -1 0")
-    assert mock.us == [1650, 1350, 1500]
+    assert mock.us == [1800, 1200, 1500]
 
 
 def test_stop_and_ping(rig):
@@ -202,7 +202,7 @@ def test_dry_run_readback_reports_no_signal():
 
 def test_forward_only_esc_config():
     esc = EscConfig(bidirectional=False)
-    assert (esc.neutral_us, esc.min_us, esc.max_us) == (1000, 1000, 1150)
+    assert (esc.neutral_us, esc.min_us, esc.max_us) == (1000, 1000, 1300)
     assert esc.value_to_us(-0.5) == 1000
     assert esc.value_to_us(0.1) == 1100
-    assert esc.value_to_us(1.0) == 1150
+    assert esc.value_to_us(1.0) == 1300

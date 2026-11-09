@@ -114,7 +114,7 @@ def test_drive_command_is_clamped_by_the_esp32_and_reported():
         async with running_bridge() as b, connect(ws_url(b)) as ws:
             await asyncio.sleep(0.15)
             await ws.send("D 1 -1 0")
-            await recv_until(ws, lambda m: m == "T 1650 1350 1500")
+            await recv_until(ws, lambda m: m == "T 1800 1200 1500")
     run(go())
 
 
@@ -258,7 +258,7 @@ def test_real_serial_link_through_a_pty(tmp_path):
                 await ws.send("P")
                 await recv_until(ws, lambda m: m == "PONG", timeout=3)
                 await ws.send("D 1 -1 0")
-                await recv_until(ws, lambda m: m == "T 1650 1350 1500", timeout=3)
+                await recv_until(ws, lambda m: m == "T 1800 1200 1500", timeout=3)
                 await ws.send("S")
                 await recv_until(ws, lambda m: m == "T 1500 1500 1500", timeout=3)
 

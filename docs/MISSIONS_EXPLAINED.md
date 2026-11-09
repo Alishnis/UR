@@ -27,8 +27,8 @@ The laptop does the thinking (control, vision); the ESP32 executes and enforces 
   then per thruster: invert → gain → dead band → MAX throttle → ramp (≤ 1.5 / s)
   ```
 - The GUI sends `D left right vert` **20 times per second** while ARMED, `S` while DISARMED.
-- **Firmware** maps each value to a pulse `1500 + v × 500 µs`, **hard-clamps** it to 1350–1650 µs
-  (30 % power), adds the per-ESC neutral trim and outputs 50 Hz PWM with the ESP32's **LEDC**
+- **Firmware** maps each value to a pulse `1500 + v × 500 µs`, **hard-clamps** it to 1200–1800 µs
+  (60 % power), adds the per-ESC neutral trim and outputs 50 Hz PWM with the ESP32's **LEDC**
   hardware peripheral (14-bit, ~1.2 µs resolution).
 - **Safety:** 500 ms watchdog in the firmware (no command → all stop), strict command parser,
   neutral at boot + 4 s ESC arming, E-STOP and auto-disarm on any link loss in the GUI, the bridge

@@ -30,7 +30,7 @@ static int outUs(size_t i) { return g_us[i] + NEUTRAL_TRIM_US[i]; }
 
 // Set output i to a pulse width (us): clamp, remember, then send to the hardware.
 static void writeUs(size_t i, int us) {
-  us = proto::clampUs(us);         // never outside 1350..1650 us, whatever the caller asked
+  us = proto::clampUs(us);         // never outside 1200..1800 us, whatever the caller asked
   g_us[i] = us;                    // remember it (telemetry and the self-check use it)
   if (DRY_RUN || !g_pwmOk[i]) return;  // DRY_RUN or PWM setup failed: do not touch the pin
 #if ESP_ARDUINO_VERSION_MAJOR >= 3

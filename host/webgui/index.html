@@ -70,20 +70,65 @@
           </div>
         </div>
 
+        <div class="rightcol">
+          <section class="panel drivebox" id="panel-drive" aria-label="Drive">
+            <div class="armrow">
+              <button type="button" id="btn-arm" class="btn arm">ARM</button>
+              <button type="button" id="btn-estop" class="btn estop">E-STOP <small>Esc</small></button>
+            </div>
+            <div id="armstate" class="armstate">DISARMED</div>
+
+            <div class="dirpad" id="dirpad" role="group" aria-label="Direction control"></div>
+            <div class="thrpad" id="thrpad" role="group" aria-label="Single thruster control"></div>
+            <div class="padrow">
+              <button type="button" id="btn-reverse" class="btn small" aria-pressed="false" title="Thruster buttons push backwards while on">Reverse</button>
+              <button type="button" id="btn-zero" class="btn small" title="Space">Zero all <small>Space</small></button>
+            </div>
+
+            <label class="slider">
+              <span>MAX</span>
+              <input type="range" id="max-slider" aria-label="MAX throttle">
+              <output id="max-out"></output>
+            </label>
+            <div class="slider">
+              <span>Mode</span>
+              <select id="drive-mode" aria-label="Drive mode">
+                <option value="latch">Throttle: levels stay</option>
+                <option value="hold">Hold: only while pressed</option>
+              </select>
+            </div>
+
+            <details class="keyhelp">
+              <summary>Magnitude, help and keys</summary>
+              <div class="slider">
+                <span>Magnitude <small>J / K</small></span>
+                <div class="meter"><div id="mag-fill"></div></div>
+                <output id="mag-out"></output>
+              </div>
+              <p class="hint" id="max-hint"></p>
+              <p class="hint" id="drive-mode-hint"></p>
+              <p class="hint">Left / Right turn the ROV. Press and hold a button like its key. The three thruster buttons drive one thruster alone; Reverse flips them.</p>
+              <table>
+                <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>forward / back (Throttle mode: one press = one power level up / down)</td></tr>
+                <tr><td><kbd>A</kbd> <kbd>D</kbd></td><td>yaw left / right (same)</td></tr>
+                <tr><td><kbd>R</kbd> <kbd>F</kbd></td><td>up / down (same)</td></tr>
+                <tr><td>buttons</td><td>Left / Right / Up thruster alone: on-screen buttons only (no key). Reverse button = backwards</td></tr>
+                <tr><td><kbd>J</kbd> <kbd>K</kbd></td><td>lower / raise magnitude</td></tr>
+                <tr><td><kbd>Space</kbd></td><td>all zero at once (also clears the Throttle levels)</td></tr>
+                <tr><td><kbd>Esc</kbd></td><td>E-STOP (disarm), works while typing</td></tr>
+                <tr><td><kbd>H</kbd></td><td>hold timer start / stop (camera tab 4 Hook)</td></tr>
+              </table>
+            </details>
+          </section>
+
         <aside class="side" id="cam-side">
           <div class="sidepane" id="side-drive" role="tabpanel" aria-labelledby="tab-drive">
-            <h3>Pilot view</h3>
-            <ul class="helplist">
-              <li><b>Top left</b> ARMED / DISARMED</li>
-              <li><b>Top right</b> attempt clock</li>
-              <li><b>Bottom left</b> active mission</li>
-              <li><b>Bottom right</b> detector time per frame</li>
-            </ul>
-            <p class="hint">Drive sends no frames to the detector. Pick a mission tab for its overlay and hints. Big view makes the picture fill the window.</p>
-            <h3>Camera lens</h3>
-            <label class="field">HFOV in air, deg <input type="number" id="cam-hfov" min="20" max="170" step="1"></label>
-            <label class="check"><input type="checkbox" id="cam-underwater"> Underwater (flat port shrinks the view)</label>
-            <p class="hint" id="cam-hfov-eff"></p>
+            <details class="sub">
+              <summary>Camera lens</summary>
+              <label class="field">HFOV in air, deg <input type="number" id="cam-hfov" min="20" max="170" step="1"></label>
+              <label class="check"><input type="checkbox" id="cam-underwater"> Underwater (flat port shrinks the view)</label>
+              <p class="hint" id="cam-hfov-eff"></p>
+            </details>
           </div>
 
           <div class="sidepane" id="side-m21" role="tabpanel" aria-labelledby="tab-m21" hidden>
@@ -206,60 +251,8 @@
             </details>
           </div>
         </aside>
+        </div>
       </div>
-    </section>
-
-    <section class="panel" id="panel-drive">
-      <h2>Drive</h2>
-      <div class="armrow">
-        <button type="button" id="btn-arm" class="btn arm">ARM</button>
-        <button type="button" id="btn-estop" class="btn estop">E-STOP <small>Esc</small></button>
-      </div>
-      <div id="armstate" class="armstate">DISARMED</div>
-
-      <label class="slider">
-        <span>MAX throttle</span>
-        <input type="range" id="max-slider" aria-label="MAX throttle">
-        <output id="max-out"></output>
-      </label>
-      <p class="hint" id="max-hint"></p>
-
-      <div class="slider">
-        <span>Magnitude <small>J / K</small></span>
-        <div class="meter"><div id="mag-fill"></div></div>
-        <output id="mag-out"></output>
-      </div>
-
-      <div class="slider">
-        <span>Drive mode</span>
-        <select id="drive-mode" aria-label="Drive mode">
-          <option value="latch">Throttle: levels stay</option>
-          <option value="hold">Hold: only while pressed</option>
-        </select>
-      </div>
-      <p class="hint" id="drive-mode-hint"></p>
-
-      <div class="dirpad" id="dirpad" role="group" aria-label="Direction control"></div>
-      <div class="thrpad" id="thrpad" role="group" aria-label="Single thruster control"></div>
-      <div class="padrow">
-        <button type="button" id="btn-reverse" class="btn small" aria-pressed="false" title="Thruster buttons push backwards while on">Reverse</button>
-        <button type="button" id="btn-zero" class="btn small" title="Space">Zero all <small>Space</small></button>
-        <span class="hint">Left / Right turn the ROV. Press and hold a button like its key. The three thruster buttons drive one thruster alone; Reverse flips them.</span>
-      </div>
-
-      <details class="keyhelp">
-        <summary>Keys</summary>
-        <table>
-          <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>forward / back (Throttle mode: one press = one power level up / down)</td></tr>
-          <tr><td><kbd>A</kbd> <kbd>D</kbd></td><td>yaw left / right (same)</td></tr>
-          <tr><td><kbd>R</kbd> <kbd>F</kbd></td><td>up / down (same)</td></tr>
-          <tr><td>buttons</td><td>Left / Right / Up thruster alone: on-screen buttons only (no key). Reverse button = backwards</td></tr>
-          <tr><td><kbd>J</kbd> <kbd>K</kbd></td><td>lower / raise magnitude</td></tr>
-          <tr><td><kbd>Space</kbd></td><td>all zero at once (also clears the Throttle levels)</td></tr>
-          <tr><td><kbd>Esc</kbd></td><td>E-STOP (disarm), works while typing</td></tr>
-          <tr><td><kbd>H</kbd></td><td>hold timer start / stop (camera tab 4 Hook)</td></tr>
-        </table>
-      </details>
     </section>
 
     <details class="panel wide diag" id="diagnostics">

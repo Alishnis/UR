@@ -37,8 +37,9 @@ constexpr int NEUTRAL_US = ESC_BIDIRECTIONAL ? 1500 : 1000;  // stop pulse
 constexpr int US_PER_UNIT = ESC_BIDIRECTIONAL ? 500 : 1000;  // us for value 1.0
 
 // Hard clamp, cannot be bypassed from the laptop: NEUTRAL_US +/- MAX_DELTA_US.
-// 150 us = 30 % of the bidirectional range. Raise only after pool tests.
-constexpr int MAX_DELTA_US = 150;  // -> pulses always stay within 1350..1650 us
+// 300 us = 60 % of the bidirectional range (it was 150 us = 30 %). More thrust, more current and a
+// harder-to-steer robot: keep an eye on battery voltage / ESC heat. Lower it if the board resets.
+constexpr int MAX_DELTA_US = 300;  // -> pulses always stay within 1200..1800 us
 
 // Per-ESC stop correction, added to every pulse of that output (ESC_PINS order).
 // An ESC whose real stop is not at NEUTRAL_US slowly spins or twitches at "neutral".
@@ -50,8 +51,8 @@ constexpr int MAX_DELTA_US = 150;  // -> pulses always stay within 1350..1650 us
 constexpr int NEUTRAL_TRIM_US[NUM_ESC] = {0, -22, -5};  // left, right, vertical (us)
 
 // Lowest / highest pulse the clamp allows (forward-only ESCs never go below their stop).
-constexpr int MIN_US = ESC_BIDIRECTIONAL ? NEUTRAL_US - MAX_DELTA_US : NEUTRAL_US;  // 1350
-constexpr int MAX_US = NEUTRAL_US + MAX_DELTA_US;                                    // 1650
+constexpr int MIN_US = ESC_BIDIRECTIONAL ? NEUTRAL_US - MAX_DELTA_US : NEUTRAL_US;  // 1200
+constexpr int MAX_US = NEUTRAL_US + MAX_DELTA_US;                                    // 1800
 
 constexpr uint32_t PWM_FREQ_HZ = 50;   // standard servo/ESC frame, 20 ms
 constexpr uint8_t PWM_BITS = 14;       // 20000 us / 16384 = 1.22 us per step

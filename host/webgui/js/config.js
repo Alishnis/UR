@@ -10,10 +10,10 @@ export const CONFIG = {
   // Bridge WebSocket port (the page host is taken from the address bar).
   wsPort: 8765,
 
-  // MAX throttle slider: fraction of the full ESC range. 0.30 = +-150 us.
+  // MAX throttle slider: fraction of the full ESC range. 0.60 = +-300 us (it was 0.30 = +-150 us).
   // The firmware clamp (MAX_DELTA_US in src/config.h) is the one that cannot be bypassed.
-  maxThrottle: { default: 0.30, limit: 0.60, step: 0.01 },
-  firmwareMaxDeltaUs: 150, // display only: keep equal to MAX_DELTA_US in src/config.h
+  maxThrottle: { default: 0.60, limit: 0.60, step: 0.01 },
+  firmwareMaxDeltaUs: 300, // display only: keep equal to MAX_DELTA_US in src/config.h
   neutralUs: 1500,         // display only: telemetry us -> fraction
   usPerUnit: 500,          // display only: telemetry us -> fraction
 
@@ -23,9 +23,9 @@ export const CONFIG = {
   // Drive mode: 'latch' = Throttle mode (the power of every direction / thruster is a LEVEL, 0..levels:
   // one key press = one level up, the opposite key = one level down, through 0 into reverse; the level
   // STAYS when the key is released; Space or Esc zero it). 'hold' = full power only while a key is pressed.
-  // levels = how many power levels each way (7: level 7 = full = MAX throttle x magnitude, level 1 = 1/7).
+  // levels = how many power levels each way (14: level 14 = full = MAX throttle x magnitude, level 1 = 1/14).
   // A key held down repeats after repeatDelaySec, then steps repeatPerSec times per second.
-  driveMode: { default: 'latch', levels: 7, repeatDelaySec: 0.5, repeatPerSec: 3 },
+  driveMode: { default: 'latch', levels: 14, repeatDelaySec: 0.5, repeatPerSec: 6 },
 
   // Output slew limit, fraction of full range per second. Never jump to high throttle.
   rampPerSec: 1.5,

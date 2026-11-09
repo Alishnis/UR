@@ -82,12 +82,12 @@ every level.
 
 ### Drive mode (Drive panel)
 
-- **Throttle: levels stay** (default). Power is a **level**, not a percentage: 7 levels each way
+- **Throttle: levels stay** (default). Power is a **level**, not a percentage: 14 levels each way
   (`config.js` `driveMode.levels`). `W/S`, `A/D` and `R/F` each move the level of their axis: **one press
   = one level up**, the opposite key = one level down (through 0 into reverse); a key held down repeats
-  after 0.5 s, 3 steps per second. **The level stays when you release the key**, like a throttle lever.
-  The pad shows `level/7`, and the thruster bars (Diagnostics) show the real pulses (level 7 = full =
-  MAX throttle, e.g. 1500 to 1575 us at 0.5; level 1 = one seventh of that).
+  after 0.5 s, 6 steps per second. **The level stays when you release the key**, like a throttle lever.
+  The pad shows `level/14`, and the thruster bars (Diagnostics) show the real pulses (level 14 = full =
+  MAX throttle, e.g. 1500 to 1800 us at 0.60; each level = about 21 us at 0.60; level 1 is barely above the motors' dead band).
   The **Left / Right / Up thruster** buttons under the pad drive one thruster alone, on top of the six
   directions. **Buttons only** (mouse or touch): no keyboard key can drive a single thruster. The
   **Reverse** toggle makes them push backwards; in Throttle mode each click steps that thruster's own
@@ -97,7 +97,7 @@ every level.
 - **Hold: only while pressed.** The old behaviour: an axis is at full MAX only while its key is held.
 
 The choice is remembered in this browser and can only be changed while DISARMED. The MAX slider
-and the firmware clamp (+-150 us) limit both modes in the same way.
+and the firmware clamp (+-300 us) limit both modes in the same way.
 
 Keys are physical keys, so they work on the Russian layout too. While a text field has
 focus (e.g. a number in Calibration) driving keys are paused and the status bar says so;
@@ -129,7 +129,7 @@ locked while ARMED.
 | `gain` | balance left against right | drive straight, adjust until the ROV does not curve |
 | `deadBand` | `(starting pulse in µs − 1500) / 500` | PIN TEST with the MAX slider raised slowly (hardware question Q3) |
 
-The MAX throttle slider defaults to 0.30 (±150 µs, the firmware clamp). The firmware
+The MAX throttle slider defaults to 0.60 (±300 µs, the firmware clamp; it was 0.30 = ±150 µs). The firmware
 clamp `MAX_DELTA_US` in `src/config.h` cannot be bypassed: a slider value above it changes nothing.
 
 ## Thruster test procedure (first power-up of all three motors)
@@ -434,7 +434,7 @@ bridge, open the GUI, press **Run R** in Pin self-check: every output must read 
 
 ## Pre-dive checklist
 
-- [ ] Firmware is LIVE (`Firmware: LIVE`), clamp ±150 µs unless deliberately changed
+- [ ] Firmware is LIVE (`Firmware: LIVE`), clamp ±300 µs (60 %) unless deliberately changed; watch battery voltage and ESC heat in the first pool run
 - [ ] Pin self-check (Run R) reads `ok` on all three outputs with ESC power unplugged
 - [ ] Each pin spins exactly one motor (PIN TEST), names and directions fixed (THRUSTER TEST)
 - [ ] Calibration saved (and copied into `config.js` as the new defaults)

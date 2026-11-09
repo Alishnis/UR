@@ -128,7 +128,7 @@ def parse_line(line: str) -> Command:
 @dataclass
 class EscConfig:
     bidirectional: bool = True
-    max_delta_us: int = 150
+    max_delta_us: int = 300
 
     @property
     def neutral_us(self) -> int:

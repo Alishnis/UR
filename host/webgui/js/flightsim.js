@@ -5,15 +5,15 @@ import { CONFIG } from './config.js';
 import { Controller } from './controller.js';
 import { bindKeyboard, directionLevels, PAD_BUTTONS, REVERSE_CODE, THRUSTER_BUTTONS } from './controls.js';
 import {
-  attitude, balanceReport, bodyPointWorld, cameraPose, computeBody, DEFAULT_PARAMS, DEFAULT_PARTS, levelBallast, physInitial,
-  physStep, STEEL_DENSITY, THRUSTERS, toWorld, vec,
+  attitude, balanceReport, bodyPointWorld, cameraPose, computeBody, DEFAULT_PARAMS, DEFAULT_PARTS, DEFAULT_TRIM, levelBallast,
+  physInitial, physStep, STEEL_DENSITY, THRUSTERS, toWorld, TRIMS, trimParts, vec,
 } from './rovphys.js';
 import { POLE, POLES, POOL, SCENES, projectPoint, projectPolygon, toCamera } from './sim.js';
 import { drawPoolView } from './testscene.js';
 
 const { add, sub, mul, cross, unit } = vec;
 const $ = (id) => document.getElementById(id);
-const STORE = 'rov.flightsim.v1';
+const STORE = 'rov.flightsim.v2'; // v2: starts trimmed (v1 started with no ballast)
 const IDENTITY = { invert: false, gain: 1, deadBand: 0 };
 const CAL = { outputSlot: { left: 0, right: 1, vert: 2 }, thrusters: { left: IDENTITY, right: IDENTITY, vert: IDENTITY } };
 const deepCopy = (x) => JSON.parse(JSON.stringify(x));
@@ -23,9 +23,12 @@ const deepCopy = (x) => JSON.parse(JSON.stringify(x));
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE) ?? 'null');
-    if (s && Array.isArray(s.parts) && s.parts.length === DEFAULT_PARTS.length) return s;
+    if (s && Array.isArray(s.parts) && s.parts.length === DEFAULT_PARTS.length) return { trim: 'custom', ...s };
   } catch { /* defaults */ }
-  return { parts: deepCopy(DEFAULT_PARTS), thrustN: DEFAULT_PARAMS.thrustN, current: 0, scene: 'poles', view: 'chase' };
+  return {
+    parts: trimParts(DEFAULT_PARTS, DEFAULT_TRIM), trim: DEFAULT_TRIM, thrustN: DEFAULT_PARAMS.thrustN, current: 0,
+    scene: 'poles', view: 'chase',
+  };
 }
 const S = load();
 const save = () => {
@@ -152,8 +155,37 @@ function slider(id, key, fmt) {
   });
   show();
 }
-slider('thrust', 'thrustN', (v) => `${v.toFixed(1)} N per thruster at +-150 us (guess: measure if you can)`);
+slider('thrust', 'thrustN', (v) => `${v.toFixed(1)} N per thruster at +-150 us (guess: measure if you can); it keeps rising up to +-300 us`);
 slider('current', 'current', (v) => (v ? `${v.toFixed(1)} N pushing the ROV back` : 'off'));
+
+// trim: ready-made ballast, or the parts table as typed ('custom')
+const trimSel = $('trim');
+for (const [id, t] of [...Object.entries(TRIMS), ['custom', { label: 'Custom: the parts table below' }]]) {
+  const o = document.createElement('option');
+  o.value = id;
+  o.textContent = t.label;
+  trimSel.append(o);
+}
+function setTrim(name) {
+  S.trim = name;
+  trimSel.value = name;
+  if (name !== 'custom') S.parts = trimParts(S.parts, name);
+}
+trimSel.value = S.trim;
+trimSel.addEventListener('change', () => {
+  setTrim(trimSel.value);
+  buildParts();
+  rebuild();
+  resetPose();
+  trimSel.blur();
+});
+
+// a measured part changed: with a ready-made trim, re-weight the ballast for the new numbers
+function partsChanged() {
+  if (S.trim !== 'custom') setTrim(S.trim);
+  buildParts();
+  rebuild();
+}
 
 // parts table
 const FIELDS = [['mass', null], ['vol', null], ['pos', 0], ['pos', 1], ['pos', 2]];
@@ -178,8 +210,8 @@ function buildParts() {
         if (!Number.isFinite(v)) return;
         if (i === null) p[key] = Math.max(0, v);
         else p[key][i] = v;
-        if (p.id === 'ballast' && key === 'mass') buildParts();
-        rebuild();
+        if (p.id === 'ballast') setTrim('custom');
+        partsChanged();
       });
       td.append(inp);
       tr.append(td);
@@ -193,23 +225,24 @@ for (const id of ['box-w', 'box-l', 'box-h']) {
   $(id).addEventListener('change', () => {
     const box = S.parts.find((p) => p.id === 'box');
     box.size = [Number($('box-w').value) || 1, Number($('box-l').value) || 1, Number($('box-h').value) || 1];
-    rebuild();
+    partsChanged();
   });
 }
 $('btn-box-vol').addEventListener('click', () => {
   const box = S.parts.find((p) => p.id === 'box');
   box.vol = Math.round(box.size[0] * box.size[1] * box.size[2]);
-  buildParts();
-  rebuild();
+  partsChanged();
 });
 $('btn-neutral').addEventListener('click', () => {
   S.parts = levelBallast(S.parts);
+  setTrim('perfect');
   buildParts();
   rebuild();
   resetPose();
 });
 $('btn-defaults').addEventListener('click', () => {
   S.parts = deepCopy(DEFAULT_PARTS);
+  setTrim(DEFAULT_TRIM);
   S.thrustN = DEFAULT_PARAMS.thrustN;
   $('thrust').value = String(S.thrustN);
   $('thrust').dispatchEvent(new Event('input'));
@@ -249,9 +282,10 @@ function renderReport() {
     out.push(line(rest, `At rest it hangs <b>${f1(r.restPitchDeg)}&deg; pitch</b> (+ nose up) and <b>${f1(r.restRollDeg)}&deg; roll</b> `
       + `(+ right side down). The buoyancy is ${f1(Math.abs(r.cobAheadCm))} cm ${r.cobAheadCm >= 0 ? 'ahead of' : 'behind'} `
       + `and ${f1(Math.abs(r.cobRightCm))} cm ${r.cobRightCm >= 0 ? 'right of' : 'left of'} the mass.`));
-    out.push(line(Math.abs(r.forwardPitchDeg) > 8 ? 'warn' : 'ok', `Full forward: nose ${r.forwardPitchDeg <= 0 ? 'dips' : 'rises'} `
-      + `about <b>${f1(Math.abs(r.forwardPitchDeg))}&deg;</b> (the side thrusters push ${f1(Math.abs(r.thrustLineAboveComCm))} cm `
-      + `${r.thrustLineAboveComCm >= 0 ? 'above' : 'below'} the centre of mass).`));
+    out.push(line(Math.abs(r.forwardPitchDeg) > 8 ? 'warn' : 'ok', `Full forward at steady speed: nose `
+      + `${r.forwardPitchDeg <= 0 ? 'dips' : 'rises'} about <b>${f1(Math.abs(r.forwardPitchDeg))}&deg;</b>. While speeding up it `
+      + `${r.thrustLineAboveComCm >= 0 ? 'dips' : 'rises'} more for a moment (the side thrusters push `
+      + `${f1(Math.abs(r.thrustLineAboveComCm))} cm ${r.thrustLineAboveComCm >= 0 ? 'above' : 'below'} the centre of mass).`));
     out.push(line(Math.abs(r.upPitchDeg) > 8 || Math.abs(r.upRollDeg) > 8 ? 'warn' : 'ok', `Up thruster at full: pitch `
       + `${f1(r.upPitchDeg)}&deg;, roll ${f1(r.upRollDeg)}&deg; (it sits ${f1(r.upThrusterAheadCm)} cm ahead and `
       + `${f1(r.upThrusterRightCm)} cm right of the centre of mass). Going DOWN tilts the opposite way.`));

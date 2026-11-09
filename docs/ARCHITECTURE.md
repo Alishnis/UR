@@ -40,7 +40,7 @@ flowchart TB
         MIX --> SEND["send D left right vert<br/>USB serial, 20 Hz"]
         SEND --> VALID{"ESP32: valid<br/>command?"}
         VALID -- no --> IGN["ignore the line"]
-        VALID -- yes --> PWM["clamp to ±150 µs, ESC trim<br/>PWM 50 Hz to the ESCs"]
+        VALID -- yes --> PWM["clamp to ±300 µs, ESC trim<br/>PWM 50 Hz to the ESCs"]
         PWM --> MOVE(["thrusters move"])
         SEND -. "no command for 500 ms" .-> WD["watchdog:<br/>all thrusters stop"]
         ESTOP(["Esc key = E-STOP"]) --> WD
@@ -82,7 +82,7 @@ flowchart TD
     ARMQ -- yes --> LINE{"complete<br/>line?"}
     LINE -- no --> M1POLL
     LINE -- yes --> PARSE{"parseLine()"}
-    PARSE -- "D a b c" --> DRIVE["value → 1500 ± 500·v µs<br/>clamp to 1350..1650<br/>plus per-ESC trim → LEDC pin"]
+    PARSE -- "D a b c" --> DRIVE["value → 1500 ± 500·v µs<br/>clamp to 1200..1800<br/>plus per-ESC trim → LEDC pin"]
     PARSE -- "S" --> NEUT["all neutral"]
     PARSE -- "P" --> PONG["reply PONG"]
     DRIVE & NEUT & PONG --> WDREF["refresh watchdog"] --> M1POLL

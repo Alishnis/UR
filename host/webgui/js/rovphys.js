@@ -42,10 +42,11 @@ export const THRUSTERS = {
 export const CAMERA = { part: 'box', tiltDeg: 20 };
 
 export const DEFAULT_PARAMS = {
-  thrustN: 4.0,      // thrust of one thruster at the firmware limit (+150 us = command 0.3), N
+  thrustN: 4.0,      // thrust of one thruster at +-150 us (command 0.3), N: a guess, measure it (slider)
+  refCmd: 0.3,       // the command thrustN belongs to; thrust keeps rising beyond it up to the limit
   reverseFrac: 0.7,  // propellers push less backwards
   deadband: 0.04,    // ESC dead band around 1500 us, as a command (0.04 = 20 us)
-  limit: 0.3,        // firmware clamp: +-150 us of 500
+  limit: 0.6,        // firmware clamp: +-300 us of 500 (60 %)
   motorTau: 0.15,    // s, propeller spin-up
   dragQuad: [50, 40, 60], // N per (m/s)^2 along body x, y, z (frame + box cross-sections)
   dragLin: 3,        // N per m/s
@@ -113,7 +114,19 @@ export function computeBody(parts = DEFAULT_PARTS) {
       corners.push(sub(add(p.pos, [sx * p.size[0] / 2, sy * p.size[1] / 2, sz * p.size[2] / 2]), com));
     }
   }
-  return { parts: P, mass, volume, com, cob, inertia, corners, netBuoyancyN: (RHO * volume - mass) * G };
+  // where the water drag acts: the middle of what the water sees (frame and box outlines, weighted by
+  // their outside volume), NOT the centre of mass. Equal thrust on both sides then goes straight even when
+  // the box and ballast sit off-centre, as on the real robot.
+  let dw = 0, dsum = [0, 0, 0];
+  for (const id of ['frame', 'box']) {
+    const p = P.find((q) => q.id === id);
+    if (!p) continue;
+    const w = p.size[0] * p.size[1] * p.size[2];
+    dw += w;
+    dsum = add(dsum, mul(p.pos, w));
+  }
+  const dragCentre = dw > 0 ? mul(dsum, 1 / dw) : [...com];
+  return { parts: P, mass, volume, com, cob, dragCentre, inertia, corners, netBuoyancyN: (RHO * volume - mass) * G };
 }
 
 // ---------- thrust ----------
@@ -123,7 +136,7 @@ export function computeBody(parts = DEFAULT_PARTS) {
 export function thrustFromCommand(u, prm = DEFAULT_PARAMS) {
   const a = Math.min(Math.abs(fin(u)), prm.limit);
   if (a <= prm.deadband) return 0;
-  const f = prm.thrustN * ((a - prm.deadband) / (prm.limit - prm.deadband)) ** 1.3;
+  const f = prm.thrustN * ((a - prm.deadband) / (prm.refCmd - prm.deadband)) ** 1.3;
   return u > 0 ? f : -f * prm.reverseFrac;
 }
 
@@ -197,10 +210,11 @@ function substep(st, body, cmd, h, prm) {
     const p = body.parts.find((q) => q.id === t.part);
     if (p && wet > 0.05) apply(toWorld(R, mul(t.dir, force[name] * Math.min(1, wet * 1.5))), sub(p.pos, body.com));
   }
-  // water drag (body axes)
-  const vb = toBody(R, st.v);
+  // water drag (body axes), acting at the drag centre
+  const rd = sub(body.dragCentre ?? body.com, body.com);
+  const vb = add(toBody(R, st.v), cross(st.w, rd));
   const drag = vb.map((v, i) => -(prm.dragLin * v + prm.dragQuad[i] * Math.abs(v) * v) * wet);
-  F = add(F, toWorld(R, drag));
+  apply(toWorld(R, drag), rd);
   T = add(T, st.w.map((w) => -(prm.rotLin * w + prm.rotQuad * Math.abs(w) * w) * (0.2 + 0.8 * wet)));
   // floor and walls: springs at the corners of the frame and the box
   let onFloor = false;
@@ -262,6 +276,32 @@ export function levelBallast(parts, { targetG = 40, z = -14 } = {}) {
   return out;
 }
 
+// Ready-made trims for practice. Each keeps the measured parts and only sets the ballast.
+//   practice: what a real, careful trim in the pool gives ("90 % right"): almost neutral (+30 g, rises
+//             slowly) with a small leftover tilt (~3 deg nose up, ~1 deg roll) to correct while driving.
+//   perfect:  +40 g and exactly level (levelBallast).
+//   raw:      no ballast at all, as built: it floats.
+export const TRIMS = {
+  practice: { label: 'Almost neutral (90 % trimmed): practice', targetG: 30, shift: [0.3, -0.8] },
+  perfect: { label: 'Perfect: +40 g, level', targetG: 40, shift: [0, 0] },
+  raw: { label: 'No ballast (as built): floats', targetG: null, shift: [0, 0] },
+};
+export const DEFAULT_TRIM = 'practice';
+
+export function trimParts(parts, name = DEFAULT_TRIM) {
+  const t = TRIMS[name] ?? TRIMS[DEFAULT_TRIM];
+  if (t.targetG === null) {
+    return parts.map((p) => (p.id === 'ballast' ? { ...p, mass: 0, pos: [...p.pos], size: [...p.size] } : { ...p, pos: [...p.pos], size: [...p.size] }));
+  }
+  const out = levelBallast(parts, { targetG: t.targetG });
+  const ballast = out.find((p) => p.id === 'ballast');
+  if (ballast && ballast.mass > 0) {
+    ballast.pos[0] = Math.round((ballast.pos[0] + t.shift[0]) * 10) / 10;
+    ballast.pos[1] = Math.round((ballast.pos[1] + t.shift[1]) * 10) / 10;
+  }
+  return out;
+}
+
 // ---------- what the pilot reads ----------
 
 // Heading (deg, + = turned right), pitch (deg, + = nose up), roll (deg, + = right side down),
@@ -310,9 +350,10 @@ export function balanceReport(body, prm = DEFAULT_PARAMS) {
   const deg = 180 / Math.PI;
   const thr = (id) => body.parts.find((p) => p.id === id)?.pos ?? [0, 0, 0];
   const lever = sub(mul(add(thr('thrL'), thr('thrR')), 0.5), body.com); // horizontal thrust line
+  const dragUp = (body.dragCentre ?? body.com)[2] - body.com[2];
   const vLever = sub(thr('thrV'), body.com);
-  const full = prm.thrustN;
-  const down = prm.thrustN * prm.reverseFrac;
+  const full = thrustFromCommand(prm.limit, prm);   // one thruster at the firmware limit
+  const down = -thrustFromCommand(-prm.limit, prm);
   // ballast (steel, placed low) that leaves +40 g of float
   const steelNet = 1 - 1 / STEEL_DENSITY;
   return {
@@ -332,10 +373,13 @@ export function balanceReport(body, prm = DEFAULT_PARAMS) {
     // resting tilt when neutral and fully under water: CoB ends up straight above the CoM
     restPitchDeg: stable ? Math.atan2(d[1], d[2]) * deg : null,
     restRollDeg: stable ? -Math.atan2(d[0], d[2]) * deg : null,
-    // both horizontal thrusters forward at full: the pitch it leans to (+ = nose up; the nose dips when
-    // the thrust line is above the CoM)
-    forwardPitchDeg: stable ? -Math.atan2(2 * full * lever[2], stiff) * deg : null,
+    // both horizontal thrusters forward at full, steady speed: the pitch it leans to (+ = nose up). The
+    // thrust pushes at the thruster height, the water holds back at the drag centre: the nose dips when
+    // the thrust line is above the drag centre. (While speeding up it also dips if the thrust line is
+    // above the CoM; the simulator shows that, this number is the steady lean.)
+    forwardPitchDeg: stable ? -Math.atan2(2 * full * (lever[2] - dragUp), stiff) * deg : null,
     thrustLineAboveComCm: lever[2] * 100,
+    thrustLineAboveDragCm: (lever[2] - dragUp) * 100,
     // up thruster at full: nose up when the thruster is ahead of the CoM
     upPitchDeg: stable ? Math.atan2(full * vLever[1], stiff) * deg : null,
     upRollDeg: stable ? -Math.atan2(full * vLever[0], stiff) * deg : null,
