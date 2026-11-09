@@ -172,6 +172,17 @@ practise every mission on land.
 Vision needs `opencv-python`, `numpy` and `pupil-apriltags` (installed by `requirements.txt`). If
 they are missing the bridge still drives the robot, and its console says `Vision:     UNAVAILABLE: <reason>`.
 
+### Flight simulator (practise driving)
+
+Open **http://localhost:8000/sim.html** (or the **Flight simulator** chip in the GUI). It simulates our
+ROV with its real balance: each part's mass and displaced volume (PVC frame, box, three thrusters,
+cables, ballast), so it pitches and rolls like the real one, floats or sinks, and climbs when it is
+nose-up. Same keys and buttons as the GUI (W/S, A/D, R/F, levels, thruster buttons, Space, Esc). The
+outside view (chase / side / behind) shows the tilt; the ROV camera view is 20° down like ours. The
+**Balance** panel says whether it floats, how much ballast it needs and where, and how it tilts when
+you drive. **Type your measured masses and the box size** into Parts: the defaults are estimates.
+Nothing is sent to the robot.
+
 ## 5. Mission 1: Wi-Fi pairing
 
 The organisers give the **SSID**, **password** and the **server URL** (`http://<server IP>:<port>/`).
